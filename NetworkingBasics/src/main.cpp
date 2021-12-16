@@ -10,5 +10,9 @@ int main(int argc, char *argv[])
 	{
 		printf("Could not create socket");
 	}
+	else
+	{
+		printf("Created socket");
+	}
 	return 0;
 }
