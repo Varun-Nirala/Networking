@@ -2,9 +2,11 @@
 #define __SOCKET_H__
 
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <netdb.h>
 #include <unistd.h>
 #include <cstdlib>
 #include <vector>
@@ -18,6 +20,23 @@ enum class ConnType
 	TCP,
 	UDP,
 };
+class Address
+{
+public:
+	Address(bool tcp, bool ipv4, const std::string service, const std::string& ipaddr);
+	~Address();
+
+	void print();
+
+private:
+	bool getAddressInfo();
+private:
+	std::string		m_szIP;			// e.g "www.example.com" or IP
+	std::string		m_szService;	// e.g. "http" or port number
+	addrinfo		m_hints{};
+	addrinfo		*m_pServinfo{};
+};
+
 class Socket
 {
 public:

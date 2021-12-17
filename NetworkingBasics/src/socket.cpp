@@ -12,6 +12,73 @@ namespace nsNW
 				return x;\
 			}})
 
+
+Address::Address(bool tcp, bool ipv4, const std::string service, const std::string& ipaddr)
+{
+	memset(&m_hints, 0, sizeof(m_hints));
+	m_hints.ai_family = ipv4 ? AF_INET : AF_INET6;
+	m_hints.ai_socktype = tcp ? SOCK_STREAM : SOCK_DGRAM;
+
+	if (ipaddr.empty())
+	{
+		m_hints.ai_flags = AI_PASSIVE;
+	}
+	m_szIP = ipaddr;
+	m_szService = service;
+}
+
+Address::~Address()
+{
+	freeaddrinfo(m_pServinfo);	// Free the Link List
+}
+
+void Address::print()
+{
+	PRINT_MSG("IP Addresses for " + m_szIP + " :");
+
+	if (getAddressInfo())
+	{
+		addrinfo *p{};
+
+		for (p = m_pServinfo; p != nullptr; p = p->ai_next)
+		{
+			void *addr{};
+			std::string ipver;
+
+			if (p->ai_family == AF_INET)
+			{
+				sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
+				addr = &(ipv4->sin_addr);
+				ipver = "IPv4";
+			}
+			else if (p->ai_family == AF_INET6)
+			{
+				sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)p->ai_addr;
+				addr = &(ipv6->sin6_addr);
+				ipver = "IPv6";
+			}
+			char ipstr[INET6_ADDRSTRLEN];
+			inet_ntop(p->ai_family, addr, ipstr, sizeof(ipstr));
+
+			PRINT_MSG("\t" + ipver + " : " + ipstr);
+		}
+	}
+}
+
+bool Address::getAddressInfo()
+{
+	if (m_pServinfo)
+	{
+		freeaddrinfo(m_pServinfo);	// Free the Link List
+		m_pServinfo = nullptr;
+	}
+	return getaddrinfo(m_szIP.empty() ? nullptr : m_szIP.c_str(), m_szService.c_str(), &m_hints, &m_pServinfo) == 0;
+}
+
+
+
+
+
 Socket::Socket(bool tcp, bool ipv4, int port, const std::string& addr)
 {
 	m_connType = tcp ? ConnType::TCP : ConnType::UDP;
