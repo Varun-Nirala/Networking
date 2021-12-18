@@ -13,30 +13,33 @@ namespace nsNW
 			}})
 
 
-Address::Address(bool tcp, bool ipv4, const std::string service, const std::string& ipaddr)
+Address::Address(bool tcp, const char* pService, const char* pAddr)
+	: m_szIP(pAddr)
+	, m_szService(pService)
 {
 	memset(&m_hints, 0, sizeof(m_hints));
-	m_hints.ai_family = ipv4 ? AF_INET : AF_INET6;
-	m_hints.ai_socktype = tcp ? SOCK_STREAM : SOCK_DGRAM;
 
-	if (ipaddr.empty())
+	m_hints.ai_family = AF_UNSPEC;	// AF_INET or AF_INET6;
+	m_hints.ai_socktype = tcp ? SOCK_STREAM : SOCK_DGRAM;
+	if (!pAddr)
 	{
 		m_hints.ai_flags = AI_PASSIVE;
 	}
-	m_szIP = ipaddr;
-	m_szService = service;
+
+	getAddressInfo(pAddr, pService);
 }
 
 Address::~Address()
 {
+	m_vecAddrInfo.clear();
 	freeaddrinfo(m_pServinfo);	// Free the Link List
 }
 
 void Address::print()
 {
-	PRINT_MSG("IP Addresses for " + m_szIP + " :");
+	PRINT_MSG("IP Addresses for " + m_szIP + " , Service : " + m_szService + " :");
 
-	if (getAddressInfo())
+	if (m_pServinfo)
 	{
 		addrinfo *p{};
 
@@ -65,25 +68,94 @@ void Address::print()
 	}
 }
 
-bool Address::getAddressInfo()
+int Address::getPort(int id) const
 {
+	int port;
+	if (isIPv4(id))
+	{
+		sockaddr_in* ipv4 = (struct sockaddr_in*)m_vecAddrInfo[id]->ai_addr;
+		port = isIPv4->sin_port;
+	}
+	else
+	{
+		sockaddr_in6* ipv6 = (struct sockaddr_in6*)m_vecAddrInfo[id]->ai_addr;
+		port = isIPv4->sin6_port;
+	}
+	
+	return ntohs(port);
+}
+
+std::string Address::getService() const
+{
+	return m_szService;
+}
+
+int Address::getFamily(int id) const
+{
+	return m_vecAddrInfo[id]->ai_family;
+}
+
+bool Address::isTCP(int id) const
+{
+	return m_vecAddrInfo[id]->ai_socktype == SOCK_STREAM;
+}
+
+bool Address::isIPv4(int id) const
+{
+	return getFamily(id) == AF_INET;
+}
+
+std::string Address::getIP(int id) const
+{
+	void* addr{};
+	char ipstr[INET6_ADDRSTRLEN];
+	if (isIPv4(id))
+	{
+		sockaddr_in *ipv4 = (struct sockaddr_in*)m_vecAddrInfo[id]->ai_addr;
+		addr = &(ipv4->sin_addr);
+	}
+	else
+	{
+		sockaddr_in6 *ipv6 = (struct sockaddr_in6*)m_vecAddrInfo[id]->ai_addr;
+		addr = &(ipv6->sin6_addr);
+	}
+	inet_ntop(getFamily(id), addr, ipstr, sizeof(INET6_ADDRSTRLEN));
+	
+	return std::string(ipstr);
+}
+
+std::string Address::getHostname(int id) const
+{
+	return std::string(m_vecAddrInfo[id]->ai_canonname);
+}
+
+bool Address::fillAddressInfo(const char* pService, const char* pAdd)
+{
+	m_vecAddrInfo.clear();
 	if (m_pServinfo)
 	{
 		freeaddrinfo(m_pServinfo);	// Free the Link List
 		m_pServinfo = nullptr;
 	}
-	return getaddrinfo(m_szIP.empty() ? nullptr : m_szIP.c_str(), m_szService.c_str(), &m_hints, &m_pServinfo) == 0;
+	if (getaddrinfo(pAdd, pService, &m_hints, &m_pServinfo) == 0)
+	{
+		for (addrinfo* p = m_pServinfo; p != nullptr; p = p->ai_next)
+		{
+			m_vecAddrInfo.push_back(p);
+		}
+		return true;
+	}
+	return false;
 }
 
 
 
 
 
-Socket::Socket(bool tcp, bool ipv4, int port, const std::string& addr)
+Socket::Socket(bool tcp, const std::string& pService, const std::string& pAddr)
+	: m_address(tcp, pService.c_str(), pAddr.c_str())
 {
-	m_connType = tcp ? ConnType::TCP : ConnType::UDP;
-	bool ret = ipv4 ? parseAsIPv4(port, addr) : parseAsIPv6(port, addr);
-	if (!ret || !createConnection() || !setOptions(true, true))
+	if (!createConnection() || !setOptions(true, true))
 	{
 		LOG_ERROR("Socket setup error.");
 		return;
@@ -107,7 +179,7 @@ const std::string Socket::getAddress() const
 	IF_NOTACTIVE_RETURN(str);
 	if (m_pSa)
 	{
-		char ip4[INET_ADDRSTRLEN];
+		
 		inet_ntop(AF_INET, &(m_pSa->sin_addr), ip4, INET_ADDRSTRLEN);
 		str = ip4;
 	}
@@ -236,12 +308,11 @@ bool Socket::setOptions(bool reuseAddr, bool reusePort)
 	return setsockopt(m_desc, SOL_SOCKET, option, &optVal, sizeof(optVal)) == 0;
 }
 
-bool Socket::parseAsIPv4(int port, const std::string& addr)
+bool Socket::parseAsIPv4(int port, const std::string& addr, sockaddr_in &sockAddr)
 {
-	m_pSa = std::make_unique<sockaddr_in>();
-	std::memset(m_pSa.get(), 0, sizeof(sockaddr_in));
-	m_pSa->sin_family = AF_INET;
-	m_pSa->sin_port = parsePort(port);
+	std::memset(sockAddr, 0, sizeof(sockAddr));
+	sockAddr.sin_family = AF_INET;
+	sockAddr.sin_port = parsePort(port);
 	parseAddress(addr);
 }
 
