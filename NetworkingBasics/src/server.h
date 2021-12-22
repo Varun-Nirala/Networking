@@ -8,17 +8,14 @@ namespace nsNW
 class Server
 {
 public:
-	Server(bool ipv4 = true, bool tcp = true, const std::string& port = "9090", const std::string& addr = "INADDR_ANY");
+	Server() = default;
+	bool initConnection(const std::string& addr = "INADDR_ANY", const std::string& port = "9090", bool tcp = true, bool ipv4 = true);
 
 	void print() const;
 private:
 	Socket		m_socket;
 };
 
-Server::Server(bool ipv4, bool tcp, const std::string &port, const std::string& addr)
-	:m_socket(ipv4, tcp, port, addr)
-{
-}
 
 void Server::print() const
 {

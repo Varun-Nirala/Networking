@@ -89,9 +89,14 @@ struct in6_addr
 class Address
 {
 public:
-	Address(bool tcp, const char* pService, const char* pAddr);
-	Address(bool ipv4, bool tcp, const char* pService, const char* pAddr);
-	~Address();
+	Address() = default;
+	Address(const char* pAddr, const char* pService, bool tcp);
+	Address(const char* pAddr, const char* pService, bool tcp, bool ipv4);
+	
+	~Address() { clear(); }
+
+	bool init(const char* pAddr, const char* pService, bool tcp);
+	bool init(const char* pAddr, const char* pService, bool tcp, bool ipv4);
 
 	inline bool empty() const { return m_pServinfo == nullptr && !m_pValidAddress; }
 
@@ -110,9 +115,11 @@ public:
 	inline std::string getIP(struct addrinfo *addr) const;
 
 	inline const struct addrinfo* getNextAddress();
-
+	inline void clear();
 	inline void print() const;
+
 private:
+	
 	inline bool init(int family, int type, int flags);
 	inline bool fillAddressInfo(const char* pService, const char* pAddr, struct addrinfo &hints);
 private:
@@ -128,19 +135,22 @@ public:
 	Socket(const Socket& sock) = delete;
 	Socket& operator=(const Socket& sock) = delete;
 
-	~Socket() { close(); };
+	~Socket() { clear(); };
 
-	explicit Socket(bool tcp, const std::string& pService, const std::string& pAddr)
-		: m_address(tcp, pService.c_str(), pAddr.c_str())
+	explicit Socket(const std::string &pAddr, const std::string &pService, bool tcp)
+		: m_address(pAddr.c_str(), pService.c_str(), tcp)
 	{
 		init();
 	}
 
-	explicit Socket(bool ipv4, bool tcp, const std::string& pService, const std::string& pAddr)
-		: m_address(ipv4, tcp, pService.c_str(), pAddr.c_str())
+	explicit Socket(const std::string& pAddr, const std::string& pService, bool tcp, bool ipv4)
+		: m_address(pAddr.c_str(), pService.c_str(), tcp, ipv4)
 	{
 		init();
 	}
+
+	bool init(const std::string& pAddr, const std::string& pService, bool tcp);
+	bool init(const std::string& pAddr, const std::string& pService, bool tcp, bool ipv4);
 
 	Socket(Socket&& sock) = default;
 	Socket& operator=(Socket&& sock) = default;
@@ -161,8 +171,9 @@ public:
 	bool listen();
 	int accept(struct sockaddr_storage &theirAddr);
 	bool connect();
-
 	bool close();
+
+	void clear();
 
 	bool sendTcp(int toSocketFd, const std::string& msg, int& sentBytes);
 	bool recvTcp(int fromSocketFd, const std::string& msg, const int MAX_SIZE = 1000);
@@ -198,24 +209,34 @@ private:
 };
 
 
-Address::Address(bool tcp, const char* pService, const char* pAddr)
+Address::Address(const char* pAddr, const char* pService, bool tcp)
 	: m_szIP(pAddr)
 	, m_szService(pService)
 {
 	init(AF_UNSPEC, tcp ? SOCK_STREAM : SOCK_DGRAM, !pAddr ? AI_PASSIVE : 0);
 }
 
-Address::Address(bool ipv4, bool tcp, const char* pService, const char* pAddr)
+Address::Address(const char* pAddr, const char* pService, bool tcp, bool ipv4)
 	: m_szIP(pAddr)
 	, m_szService(pService)
 {
 	init(ipv4 ? AF_INET : AF_INET6, tcp ? SOCK_STREAM : SOCK_DGRAM, !pAddr ? AI_PASSIVE : 0);
 }
 
-Address::~Address()
+bool Address::init(const char* pAddr, const char* pService, bool tcp)
 {
-	freeaddrinfo(m_pServinfo);
-	m_pServinfo = m_pValidAddress = nullptr;
+	clear();
+	m_szIP = pAddr;
+	m_szService = pService;
+	return init(AF_UNSPEC, tcp ? SOCK_STREAM : SOCK_DGRAM, !pAddr ? AI_PASSIVE : 0);
+}
+
+bool Address::init(const char* pAddr, const char* pService, bool tcp, bool ipv4)
+{
+	clear();
+	m_szIP = pAddr;
+	m_szService = pService;
+	return init(ipv4 ? AF_INET : AF_INET6, tcp ? SOCK_STREAM : SOCK_DGRAM, !pAddr ? AI_PASSIVE : 0);
 }
 
 int Address::getPort(struct addrinfo* addr) const
@@ -252,6 +273,13 @@ inline const addrinfo* Address::getNextAddress()
 	}
 	return m_pValidAddress;
 }
+
+void Address::clear()
+{
+	freeaddrinfo(m_pServinfo);
+	m_pServinfo = m_pValidAddress = nullptr;
+}
+
 
 bool Address::init(int family, int type, int flags)
 {
@@ -297,6 +325,21 @@ void Address::print() const
 	}
 }
 
+
+
+bool Socket::init(const std::string& pAddr, const std::string& pService, bool tcp)
+{
+	clear();
+	m_address.init(pAddr.c_str(), pService.c_str(), tcp);
+	return init();
+}
+
+bool Socket::init(const std::string& pAddr, const std::string& pService, bool tcp, bool ipv4)
+{
+	clear();
+	m_address.init(pAddr.c_str(), pService.c_str(), tcp, ipv4);
+	return init();
+}
 
 bool Socket::bind()
 {
@@ -356,11 +399,20 @@ bool Socket::close()
 	IF_NOTACTIVE_RETURN(true);
 	if (::close(m_socketFd) != 0)
 	{
+		m_socketFd = -1;
 		LOG_ERROR("Socket close error. Error code : " + std::to_string(errno));
 		return false;
 	}
+	m_socketFd = -1;
 	PRINT_MSG("Socket close success.");
 	return true;
+}
+
+void Socket::clear()
+{
+	close();
+	m_address.clear();
+	m_buffer.clear();
 }
 
 bool Socket::sendTcp(int toSocketFd, const std::string& msg, int &sentBytes)
