@@ -130,15 +130,25 @@ public:
 
 	~Socket() { close(); };
 
-	explicit Socket(bool tcp, const std::string &pService, const std::string &pAddr);
-	explicit Socket(bool ipv4, bool tcp, const std::string& pService, const std::string& pAddr);
+	explicit Socket(bool tcp, const std::string& pService, const std::string& pAddr)
+		: m_address(tcp, pService.c_str(), pAddr.c_str())
+	{
+		init();
+	}
+
+	explicit Socket(bool ipv4, bool tcp, const std::string& pService, const std::string& pAddr)
+		: m_address(ipv4, tcp, pService.c_str(), pAddr.c_str())
+	{
+		init();
+	}
+
 	Socket(Socket&& sock) = default;
 	Socket& operator=(Socket&& sock) = default;
 
 	inline void setBacklog(int val) { m_backlog = val; }
 
-	inline int getSocketId() const { return m_desc; }
-	inline bool isActive() const { return !(m_desc == -1); }
+	inline int getSocketId() const { return m_socketFd; }
+	inline bool isActive() const { return !(m_socketFd == -1); }
 
 	inline int getFamily() const { return m_address.getFamily(); }
 	inline std::string getHostname() const { return m_address.getHostname(); }
@@ -154,14 +164,37 @@ public:
 
 	bool close();
 
+	bool sendTcp(int toSocketFd, const std::string& msg, int& sentBytes);
+	bool recvTcp(int fromSocketFd, const std::string& msg, const int MAX_SIZE = 1000);
+
+	bool sendDatagram(int toSocketFd, const std::string& hostname, const std::string& msg, int& sentBytes);
+	bool recvDatagram(int fromSocketFd, struct sockaddr_storage& theirAddr, const std::string& msg, const int MAX_SIZE = 1000);
+
 protected:
+	bool init();
 	bool getValidSocket();
 	bool setSocketOptions(bool reuseAddr, bool reusePort);
 
+	struct Buffer
+	{
+		std::unique_ptr<char[]>				m_pBuf;
+		size_t								m_size{};
+
+		char& operator[](size_t id) { return m_pBuf[id]; }
+		const char& operator[](size_t id) const { return m_pBuf[id]; }
+
+		char* get() { return m_pBuf.get(); }
+		const size_t size() const { return m_size; }
+		inline bool init(size_t s) { clear(); m_size = s; m_pBuf = std::make_unique<char[]>(m_size); return m_pBuf != nullptr; }
+		inline void clear() { m_size = 0; m_pBuf.reset(nullptr); }
+		inline bool empty() const { return m_size == 0; }
+	};
+
 private:
-	int										m_desc{-1};
+	int										m_socketFd{-1};	// Socket file descriptor
 	Address									m_address;
 	int										m_backlog{5};
+	Buffer									m_buffer;
 };
 
 
@@ -265,29 +298,10 @@ void Address::print() const
 }
 
 
-
-
-Socket::Socket(bool tcp, const std::string& pService, const std::string& pAddr)
-	: m_address(tcp, pService.c_str(), pAddr.c_str())
-{
-	if (!getValidSocket() || !setSocketOptions(true, true))
-	{
-		LOG_ERROR("Socket setup error.");
-		return;
-	}
-	PRINT_MSG("Socket created : " + std::to_string(m_desc));
-}
-
-Socket::Socket(bool ipv4, bool tcp, const std::string& pService, const std::string& pAddr)
-	:m_address(ipv4, tcp, pService.c_str(), pAddr.c_str())
-{
-
-}
-
 bool Socket::bind()
 {
 	IF_NOTACTIVE_RETURN(false);
-	if (::bind(m_desc, m_address.getAddrinfo()->ai_addr, m_address.getAddrinfo()->ai_addrlen) == -1)
+	if (::bind(m_socketFd, m_address.getAddrinfo()->ai_addr, m_address.getAddrinfo()->ai_addrlen) == -1)
 	{
 		LOG_ERROR("Socket bind error. Error code : " + std::to_string(errno));
 		return false;
@@ -298,7 +312,7 @@ bool Socket::bind()
 
 bool Socket::listen()
 {
-	if (::listen(m_desc, m_backlog) == -1)
+	if (::listen(m_socketFd, m_backlog) == -1)
 	{
 		LOG_ERROR("Socket listen error. Error code : " + std::to_string(errno));
 		return false;
@@ -314,7 +328,7 @@ int Socket::accept(struct sockaddr_storage& theirAddr)
 	socklen_t addr_size = sizeof(theirAddr);
 	memset(&theirAddr, 0, addr_size);
 
-	int new_fd = ::accept(m_desc, (struct sockaddr*)&theirAddr, &addr_size);
+	int new_fd = ::accept(m_socketFd, (struct sockaddr*)&theirAddr, &addr_size);
 	if (new_fd == -1)
 	{
 		LOG_ERROR("Connection accept error. Error code : " + std::to_string(errno));
@@ -328,7 +342,7 @@ bool Socket::connect()
 {
 	IF_NOTACTIVE_RETURN(false);
 
-	if (::connect(m_desc, m_address.getAddrinfo()->ai_addr, m_address.getAddrinfo()->ai_addrlen) == -1)
+	if (::connect(m_socketFd, m_address.getAddrinfo()->ai_addr, m_address.getAddrinfo()->ai_addrlen) == -1)
 	{
 		LOG_ERROR("Socket connect error. Error code : " + std::to_string(errno));
 		return false;
@@ -340,12 +354,110 @@ bool Socket::connect()
 bool Socket::close()
 {
 	IF_NOTACTIVE_RETURN(true);
-	if (::close(m_desc) != 0)
+	if (::close(m_socketFd) != 0)
 	{
 		LOG_ERROR("Socket close error. Error code : " + std::to_string(errno));
 		return false;
 	}
 	PRINT_MSG("Socket close success.");
+	return true;
+}
+
+bool Socket::sendTcp(int toSocketFd, const std::string& msg, int &sentBytes)
+{
+	if (msg.empty())
+	{
+		PRINT_MSG("Trying to send empty msg.");
+		return false;
+	}
+
+	sentBytes = ::send(toSocketFd, msg.c_str(), msg.size(), 0);
+	if (sentBytes == -1)
+	{
+		LOG_ERROR("Send error. Error code : " + std::to_string(errno));
+		return false;
+	}
+	else if (sentBytes == 0)
+	{
+		LOG_ERROR("Connectioned closed by server on socket : " + std::to_string(toSocketFd));
+		return false;
+	}
+	PRINT_MSG("Sent byte count : " + std::to_string(sentBytes));
+	return true;
+}
+
+bool Socket::recvTcp(int fromSocketFd, const std::string& msg, const int MAX_SIZE)
+{
+	if (m_buffer.empty() || m_buffer.size() < MAX_SIZE)
+	{
+		m_buffer.init(MAX_SIZE);
+	}
+	int recvBytes = ::recv(fromSocketFd, m_buffer.get(), MAX_SIZE - 1, 0);
+	if (recvBytes == -1)
+	{
+		LOG_ERROR("Recieve error. Error code : " + std::to_string(errno));
+		return false;
+	}
+	else if (recvBytes == 0)
+	{
+		LOG_ERROR("Connectioned closed by server on socket : " + std::to_string(fromSocketFd));
+		return false;
+	}
+
+	PRINT_MSG("Packet length   : " + std::to_string(recvBytes));
+	PRINT_MSG("Packet          : " + std::string(m_buffer.get()));
+	return true;
+}
+
+bool Socket::sendDatagram(int toSocketFd, const std::string &hostname, const std::string & msg, int& sentBytes)
+{
+	sentBytes = ::sendto(toSocketFd, hostname.c_str(), hostname.size(), 0, m_address.getAddrinfo()->ai_addr, m_address.getAddrinfo()->ai_addrlen);
+	if (sentBytes == -1)
+	{
+		LOG_ERROR("Send error. Error code : " + std::to_string(errno));
+		return false;
+	}
+	else if (sentBytes == 0)
+	{
+		LOG_ERROR("Connectioned closed by server on socket : " + std::to_string(toSocketFd));
+		return false;
+	}
+	PRINT_MSG("Sent byte count : " + std::to_string(sentBytes));
+	return true;
+}
+
+bool Socket::recvDatagram(int fromSocketFd, struct sockaddr_storage &theirAddr, const std::string& msg, const int MAX_SIZE)
+{
+	if (m_buffer.empty() || m_buffer.size() < MAX_SIZE)
+	{
+		m_buffer.init(MAX_SIZE);
+	}
+	socklen_t addr_size = sizeof(theirAddr);
+	memset(&theirAddr, 0, addr_size);
+
+	int recvBytes = ::recvfrom(fromSocketFd, m_buffer.get(), MAX_SIZE - 1, 0, (struct sockaddr*)&theirAddr, &addr_size);
+
+	if (recvBytes == -1)
+	{
+		LOG_ERROR("Recieve error. Error code : " + std::to_string(errno));
+		return false;
+	}
+	m_buffer[recvBytes] = '\0';
+	std::string ip = m_address.getIP((struct addrinfo*)&theirAddr);
+	PRINT_MSG("Got packet from : " + ip);
+	PRINT_MSG("Packet length   : " + std::to_string(recvBytes));
+	PRINT_MSG("Packet          : " + std::string(m_buffer.get()));
+	return true;
+}
+
+bool Socket::init()
+{
+	if (!getValidSocket() || !setSocketOptions(true, true))
+	{
+		LOG_ERROR("Socket setup error.");
+		return false;
+	}
+	PRINT_MSG("Socket created : " + std::to_string(m_socketFd));
 	return true;
 }
 
@@ -355,8 +467,8 @@ bool Socket::getValidSocket()
 	const struct addrinfo* p = m_address.getNextAddress();
 	while (p)
 	{
-		m_desc = socket(p->ai_family, p->ai_family, p->ai_protocol);
-		if (m_desc != -1)
+		m_socketFd = socket(p->ai_family, p->ai_family, p->ai_protocol);
+		if (m_socketFd != -1)
 		{
 			break;
 		}
@@ -364,10 +476,10 @@ bool Socket::getValidSocket()
 	}
 	if (!p)
 	{
-		LOG_ERROR("Socket creation error. Error code : " + std::to_string(m_desc));
+		LOG_ERROR("Socket creation error. Error code : " + std::to_string(m_socketFd));
 		return false;
 	}
-	PRINT_MSG("Socket creation success. Socket ID : " + std::to_string(m_desc));
+	PRINT_MSG("Socket creation success. Socket ID : " + std::to_string(m_socketFd));
 	return true;
 }
 
@@ -385,7 +497,7 @@ bool Socket::setSocketOptions(bool reuseAddr, bool reusePort)
 	{
 		option = option | SO_REUSEPORT;
 	}
-	int ret = setsockopt(m_desc, SOL_SOCKET, option, &optVal, sizeof(optVal));
+	int ret = setsockopt(m_socketFd, SOL_SOCKET, option, &optVal, sizeof(optVal));
 	if (ret == -1)
 	{
 		LOG_ERROR("Socket option settting error. Error code : " + std::to_string(ret));
