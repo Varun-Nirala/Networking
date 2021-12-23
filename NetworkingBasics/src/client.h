@@ -2,6 +2,7 @@
 #define __CLIENT_H__
 
 #include "socket.h"
+#include <unordered_map>
 
 namespace nsNW
 {
@@ -11,55 +12,30 @@ public:
 	Client() = default;
 	~Client() = default;
 
-	bool initConnection(const std::string& addr, const std::string& port, bool tcp, bool ipv4);
-	bool initConnection(const std::string& addr, const std::string& port, bool tcp);
+	inline bool initConnection(const std::string& addr, const std::string& port, bool tcp, bool ipv4);
+	inline bool initConnection(const std::string& addr, const std::string& port, bool tcp);
 
 	bool read(std::string& msg, const int maxSize = 1000);
-	bool write(std::string& msg);
+	bool write(std::string to, std::string& msg);
 
 	void print() const;
 private:
-	bool initTCP();
-	bool initUDP();
+	inline bool initTCP(Socket &socket, const std::string& addr, const std::string& port, int family);
+	inline bool initUDP(Socket &socket, const std::string& addr, const std::string& port, int family);
 
 private:
-	Socket		m_socket;
+	Socket											m_socket;
+	std::unordered_map<std::string, CommData>		m_servers;
 };
 
 bool Client::initConnection(const std::string& addr, const std::string& port, bool tcp, bool ipv4)
 {
-	m_socket.clear();
-	if (m_socket.init(addr, port, tcp, ipv4))
-	{
-		PRINT_MSG("Got socket : " + std::to_string(m_socket.getSocketId()));
-		if (tcp)
-		{
-			return initTCP();
-		}
-		else
-		{
-			return initUDP();
-		}
-	}
-	return false;
+	return tcp ? initTCP(m_socket, addr, port, ipv4 ? AF_INET : AF_INET6) : initUDP(m_socket, addr, port, ipv4 ? AF_INET : AF_INET6);
 }
 
 bool Client::initConnection(const std::string& addr, const std::string& port, bool tcp)
 {
-	m_socket.clear();
-	if (m_socket.init(addr, port, tcp))
-	{
-		PRINT_MSG("Got socket : " + std::to_string(m_socket.getSocketId()));
-		if (tcp)
-		{
-			return initTCP();
-		}
-		else
-		{
-			return initUDP();
-		}
-	}
-	return false;
+	return tcp ? initTCP(m_socket, addr, port, AF_UNSPEC) : initUDP(m_socket, addr, port, AF_UNSPEC);
 }
 
 bool Client::read(std::string& msg, const int maxSize)
@@ -71,13 +47,19 @@ bool Client::read(std::string& msg, const int maxSize)
 	}
 	else
 	{
-		ret = m_socket.recvDatagram(msg, maxSize);
+		std::string serverId;
+		CommData data;
+		ret = m_socket.recvDatagram(data._addr, msg, maxSize);
+		serverId = getPortIP((addrinfo*)&data._addr);
+		m_servers[serverId] = data;
+		PRINT_MSG("Server Id : " + serverId);
 	}
-	PRINT_MSG("Got msg : " + msg);
+
+	PRINT_MSG("Msg       : " + msg);
 	return ret;
 }
 
-bool Client::write(std::string& msg)
+bool Client::write(std::string to, std::string& msg)
 {
 	bool ret{};
 	int sentBytes{};
@@ -87,9 +69,9 @@ bool Client::write(std::string& msg)
 	}
 	else
 	{
-		ret = m_socket.sendDatagram(msg, sentBytes);
+		ret = m_socket.sendDatagram(m_servers[to]._addr, msg, sentBytes);
 	}
-	PRINT_MSG("Tried sending msg[" + std::to_string(msg.size()) + "]   : " + msg);
+	PRINT_MSG("Tried sending msg[" + std::to_string(msg.size()) + "]   : " + msg + ", To : " + to);
 	PRINT_MSG("Number of bytes sent : " + std::to_string(sentBytes));
 	return ret;
 }
@@ -103,19 +85,39 @@ void Client::print() const
 	PRINT_MSG("Client ID : ");
 }
 
-bool Client::initTCP()
+bool Client::initTCP(Socket& socket, const std::string& addr, const std::string& port, int family)
 {
-	if (m_socket.connect())
+	if (socket.isActive())
 	{
-		PRINT_MSG("Socket connect success.");
-		return true;
+		socket.clear();
 	}
+	if (socket.init(addr, port, true, family))
+	{
+		PRINT_MSG("Got socket : " + std::to_string(socket.getSocketId()));
+		if (socket.connect())
+		{
+			PRINT_MSG("Socket connect success.");
+			return true;
+		}
+		PRINT_MSG("Socket connect failed.");
+	}
+	PRINT_MSG("Socket creation failed.");
 	return false;
 }
 
-bool Client::initUDP()
+bool Client::initUDP(Socket& socket, const std::string& addr, const std::string& port, int family)
 {
-	return true;//Noting required;
+	if (socket.isActive())
+	{
+		socket.clear();
+	}
+	if (socket.init(addr, port, false, family))
+	{
+		PRINT_MSG("Got socket : " + std::to_string(socket.getSocketId()));
+		return true;
+	}
+	PRINT_MSG("Socket creation failed.");
+	return false;
 }
 }
 #endif // #ifndef __CLIENT_H__

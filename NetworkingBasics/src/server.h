@@ -2,7 +2,7 @@
 #define __SERVER_H__
 
 #include "socket.h"
-#include <vector>
+#include <unordered_map>
 
 namespace nsNW
 {
@@ -16,65 +16,31 @@ public:
 	bool initConnection(const std::string& addr, const std::string& port, bool tcp);
 
 	bool listen();
-	bool accept();
+	bool accept(std::string clientUniqueName = "");
 
 	bool read(std::string& msg, const int maxSize = 1000);
-	bool write(std::string& msg);
+	bool write(std::string to, std::string& msg);
 
 	void print() const;
 private:
-	bool initTCP();
-	bool initUDP();
+	inline bool initTCP(Socket& socket, const std::string& addr, const std::string& port, int family);
+	inline bool initUDP(Socket& socket, const std::string& addr, const std::string& port, int family);
 
 private:
-	struct ClientData
-	{
-		sockaddr_storage		_addr;
-		Socket::SOCKET_TYPE		_sId;
-	};
-
-	Socket						m_socket;
-	int							m_backLog{5};
-	std::vector<ClientData>		m_clients;
+	int												m_backLog{ 5 };
+	Socket											m_socket;
+	std::unordered_map<std::string, CommData>		m_clients;
 	
 };
 
 bool Server::initConnection(const std::string& addr, const std::string& port, bool tcp, bool ipv4)
 {
-	m_socket.clear();
-	m_socket.setBacklog(m_backLog);
-	if (m_socket.init(addr, port, tcp, ipv4))
-	{
-		PRINT_MSG("Got socket : " + std::to_string(m_socket.getSocketId()));
-		if (tcp)
-		{
-			return initTCP();
-		}
-		else
-		{
-			return initUDP();
-		}
-	}
-	return false;
+	return tcp ? initTCP(m_socket, addr, port, ipv4 ? AF_INET : AF_INET6) : initUDP(m_socket, addr, port, ipv4 ? AF_INET : AF_INET6);
 }
 
 bool Server::initConnection(const std::string& addr, const std::string& port, bool tcp)
 {
-	m_socket.clear();
-	m_socket.setBacklog(m_backLog);
-	if (m_socket.init(addr, port, tcp))
-	{
-		PRINT_MSG("Got socket : " + std::to_string(m_socket.getSocketId()));
-		if (tcp)
-		{
-			return initTCP();
-		}
-		else
-		{
-			return initUDP();
-		}
-	}
-	return false;
+	return tcp ? initTCP(m_socket, addr, port, AF_UNSPEC) : initUDP(m_socket, addr, port, AF_UNSPEC);
 }
 
 bool Server::listen()
@@ -89,13 +55,21 @@ bool Server::listen()
 	return false;
 }
 
-bool Server::accept()
+bool Server::accept(std::string clientUniqueName)
 {
-	ClientData client;
+	CommData client;
 	if (m_socket.accept(client._addr, client._sId))
 	{
-		PRINT_MSG("Server accepted connect request from ID : " + std::to_string(client._sId) + " : " + m_socket.getIP((addrinfo *)(&client._addr)));
-		m_clients.emplace_back(client);
+		PRINT_MSG("Server accepted connect request from ID : " + std::to_string(client._sId) + " : " + getIP((addrinfo *)(&client._addr)));
+		if (clientUniqueName.empty())
+		{
+			m_clients[std::to_string(client._sId)] = client;
+		}
+		else
+		{
+			m_clients[clientUniqueName] = client;
+		}
+		
 		return true;
 	}
 	PRINT_MSG("Server accept failed");
@@ -111,13 +85,21 @@ bool Server::read(std::string& msg, const int maxSize)
 	}
 	else
 	{
-		ret = m_socket.recvDatagram(msg, maxSize);
+		std::string clientId;
+		CommData data;
+		ret = m_socket.recvDatagram(data._addr, msg, maxSize);
+		clientId = getPortIP((addrinfo*)&data._addr);
+		m_clients[clientId] = data;
+		PRINT_MSG("Server Id : " + clientId);
+
+		CommData client;
+		ret = m_socket.recvDatagram(client._addr, msg, maxSize);
 	}
 	PRINT_MSG("Got msg : " + msg);
 	return ret;
 }
 
-bool Server::write(std::string& msg)
+bool Server::write(std::string to, std::string& msg)
 {
 	bool ret{};
 	int sentBytes{};
@@ -127,7 +109,7 @@ bool Server::write(std::string& msg)
 	}
 	else
 	{
-		ret = m_socket.sendDatagram(msg, sentBytes);
+		ret = m_socket.sendDatagram(m_clients[to]._addr, msg, sentBytes);
 	}
 	PRINT_MSG("Tried sending msg[" + std::to_string(msg.size()) + "]   : " + msg);
 	PRINT_MSG("Number of bytes sent : " + std::to_string(sentBytes));
@@ -143,25 +125,45 @@ void Server::print() const
 	PRINT_MSG("Server ID : ");
 }
 
-bool Server::initTCP()
+bool Server::initTCP(Socket& socket, const std::string& addr, const std::string& port, int family)
 {
-	if (m_socket.bind())
+	if (socket.isActive())
 	{
-		PRINT_MSG("Socket bind success.");
-		return true;
+		socket.clear();
 	}
-	PRINT_MSG("Socket bind failed.");
+	m_socket.setBacklog(m_backLog);
+	if (m_socket.init(addr, port, true, family))
+	{
+		PRINT_MSG("Got socket : " + std::to_string(m_socket.getSocketId()));
+		if (m_socket.bind())
+		{
+			PRINT_MSG("Socket bind success.");
+			return true;
+		}
+		PRINT_MSG("Socket bind failed.");
+	}
+	PRINT_MSG("Socket creation failed.");
 	return false;
 }
 
-bool Server::initUDP()
+bool Server::initUDP(Socket& socket, const std::string& addr, const std::string& port, int family)
 {
-	if (m_socket.bind())
+	if (socket.isActive())
 	{
-		PRINT_MSG("Socket bind success.");
-		return true;
+		socket.clear();
 	}
-	PRINT_MSG("Socket bind failed.");
+	m_socket.setBacklog(m_backLog);
+	if (m_socket.init(addr, port, true, family))
+	{
+		PRINT_MSG("Got socket : " + std::to_string(m_socket.getSocketId()));
+		if (m_socket.bind())
+		{
+			PRINT_MSG("Socket bind success.");
+			return true;
+		}
+		PRINT_MSG("Socket bind failed.");
+	}
+	PRINT_MSG("Socket creation failed.");
 	return false;
 }
 }

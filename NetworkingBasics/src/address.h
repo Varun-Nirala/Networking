@@ -25,6 +25,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <sstream>
 
 #include "helper.h"
 
@@ -100,17 +101,22 @@ struct hostent {
 	char** h_addr_list;       list of addresses
 }
 */
+
+inline std::string asString(const struct addrinfo& info);
+inline std::string getIP(const struct addrinfo* addr);
+inline int getPort(const struct addrinfo* addr);
+inline std::string getPortIP(const struct addrinfo* addr);
+
 class Address
 {
 public:
 	Address() = default;
-	Address(const char* pAddr, const char* pService, bool tcp);
-	Address(const char* pAddr, const char* pService, bool tcp, bool ipv4);
-	
 	~Address() { clear(); }
+	
+	explicit Address(const char* pAddr, const char* pService, bool tcp, int family = AF_UNSPEC);
 
+	bool init(const char* pAddr, const char* pService, bool tcp, int family);
 	bool init(const char* pAddr, const char* pService, bool tcp);
-	bool init(const char* pAddr, const char* pService, bool tcp, bool ipv4);
 
 	inline bool empty() const { return m_pServinfo == nullptr && !m_pValidAddress; }
 
@@ -122,18 +128,13 @@ public:
 	inline bool isTCP() const { return m_pValidAddress->ai_socktype == SOCK_STREAM;}
 	inline bool isIPv4() const { return getFamily() == AF_INET; }
 	inline std::string getHostname() const { return std::string(m_pValidAddress->ai_canonname); }
-	inline int getPort() const { return getPort(m_pValidAddress); }
-	inline std::string getIP() const { return getIP(m_pValidAddress); }
-
-	inline int getPort(struct addrinfo *addr) const;
-	inline std::string getIP(struct addrinfo *addr) const;
+	inline int port() const { return getPort(m_pValidAddress); }
+	inline std::string IP() const { return getIP(m_pValidAddress); }
 
 	inline const struct addrinfo* getNextAddress();
 	inline void clear();
 	inline void print() const;
-
-
-
+	
 private:
 	
 	inline bool init(int family, int type, int flags);
@@ -145,18 +146,19 @@ private:
 	struct addrinfo						*m_pValidAddress{};
 };
 
-Address::Address(const char* pAddr, const char* pService, bool tcp)
+Address::Address(const char* pAddr, const char* pService, bool tcp, int family)
 	: m_szIP(pAddr)
 	, m_szService(pService)
 {
-	init(AF_UNSPEC, tcp ? SOCK_STREAM : SOCK_DGRAM, !pAddr ? AI_PASSIVE : 0);
+	init(family, tcp ? SOCK_STREAM : SOCK_DGRAM, !pAddr ? AI_PASSIVE : 0);
 }
 
-Address::Address(const char* pAddr, const char* pService, bool tcp, bool ipv4)
-	: m_szIP(pAddr)
-	, m_szService(pService)
+bool Address::init(const char* pAddr, const char* pService, bool tcp, int family)
 {
-	init(ipv4 ? AF_INET : AF_INET6, tcp ? SOCK_STREAM : SOCK_DGRAM, !pAddr ? AI_PASSIVE : 0);
+	clear();
+	m_szIP = pAddr;
+	m_szService = pService;
+	return init(family, tcp ? SOCK_STREAM : SOCK_DGRAM, !pAddr ? AI_PASSIVE : 0);
 }
 
 bool Address::init(const char* pAddr, const char* pService, bool tcp)
@@ -165,40 +167,6 @@ bool Address::init(const char* pAddr, const char* pService, bool tcp)
 	m_szIP = pAddr;
 	m_szService = pService;
 	return init(AF_UNSPEC, tcp ? SOCK_STREAM : SOCK_DGRAM, !pAddr ? AI_PASSIVE : 0);
-}
-
-bool Address::init(const char* pAddr, const char* pService, bool tcp, bool ipv4)
-{
-	clear();
-	m_szIP = pAddr;
-	m_szService = pService;
-	return init(ipv4 ? AF_INET : AF_INET6, tcp ? SOCK_STREAM : SOCK_DGRAM, !pAddr ? AI_PASSIVE : 0);
-}
-
-int Address::getPort(struct addrinfo* addr) const
-{
-	if (addr->ai_family == AF_INET)
-	{
-		return ntohs(((struct sockaddr_in*)addr->ai_addr)->sin_port);
-	}
-	return ntohs(((struct sockaddr_in6*)addr->ai_addr)->sin6_port);
-}
-
-std::string Address::getIP(struct addrinfo* addr) const
-{
-	void* ptr{};
-	char ipstr[INET6_ADDRSTRLEN];
-	if (addr->ai_family == AF_INET)
-	{
-		ptr = &(((struct sockaddr_in*)addr->ai_addr)->sin_addr);
-	}
-	else
-	{
-		ptr = &(((struct sockaddr_in6*)addr->ai_addr)->sin6_addr);
-	}
-	inet_ntop(addr->ai_family, ptr, ipstr, sizeof(INET6_ADDRSTRLEN));
-
-	return std::string(ipstr);
 }
 
 inline const addrinfo* Address::getNextAddress()
@@ -229,7 +197,10 @@ bool Address::init(int family, int type, int flags)
 	hints.ai_addr = nullptr;
 	hints.ai_next = nullptr;
 
-	return fillAddressInfo(m_szIP.c_str(), m_szService.c_str(), hints);
+	const char* paddr = m_szIP.empty() ? nullptr : m_szIP.c_str();
+	const char* pservice = m_szService.empty() ? nullptr : m_szService.c_str();
+
+	return fillAddressInfo(paddr, pservice, hints);
 }
 
 bool Address::fillAddressInfo(const char* pAdd, const char* pService, struct addrinfo &hints)
@@ -239,8 +210,8 @@ bool Address::fillAddressInfo(const char* pAdd, const char* pService, struct add
 		freeaddrinfo(m_pServinfo);	// Free the Link List
 		m_pServinfo = nullptr;
 	}
-	int ret = 0;
-	if (ret = getaddrinfo(pAdd, pService, &hints, &m_pServinfo) != 0)
+	int ret = getaddrinfo(pAdd, pService, &hints, &m_pServinfo);
+	if (ret != 0)
 	{
 		LOG_ERROR("getaddrinfo: " + std::string(gai_strerror(ret)));
 		return false;
@@ -255,13 +226,109 @@ void Address::print() const
 	int i = 1;
 	for (addrinfo *p = m_pServinfo; p != nullptr; p = p->ai_next)
 	{
-		void* addr{};
-		std::string str{ "Address # " + std::to_string(i++)};
-
-		str += (p->ai_family == AF_INET) ? "IPv4" : "IPv6";
-		str += " " + getIP(p);
-		PRINT_MSG(str);
+		PRINT_MSG("Address # " + std::to_string(i++));
+		PRINT_MSG(asString(*p));
 	}
+}
+
+inline int getPort(const struct addrinfo* addr)
+{
+	if (addr->ai_family == AF_INET)
+	{
+		return ntohs(((struct sockaddr_in*)addr->ai_addr)->sin_port);
+	}
+	return ntohs(((struct sockaddr_in6*)addr->ai_addr)->sin6_port);
+}
+
+inline std::string getIP(const struct addrinfo* addr)
+{
+	void* ptr{};
+	char ipstr[INET6_ADDRSTRLEN];
+	if (addr->ai_family == AF_INET)
+	{
+		ptr = &(((struct sockaddr_in*)addr->ai_addr)->sin_addr);
+	}
+	else
+	{
+		ptr = &(((struct sockaddr_in6*)addr->ai_addr)->sin6_addr);
+	}
+	inet_ntop(addr->ai_family, ptr, ipstr, sizeof(INET6_ADDRSTRLEN));
+
+	return std::string(ipstr);
+}
+
+inline std::string getPortIP(const struct addrinfo* addr)
+{
+	return getIP(addr) + ":" + std::to_string(getPort(addr));
+}
+
+inline std::string asString(const struct addrinfo &info)
+{
+	std::ostringstream os;
+	os << "Flags                : 0x" << std::hex << info.ai_flags;
+	os << "Family               : ";
+	switch (info.ai_family)
+	{
+		case AF_UNSPEC:
+			os << "Unspecified.";
+			break;
+		case AF_INET:
+			os << "IPv4   : " << getIP(&info);
+			break;
+		case AF_INET6:
+			os << "IPv6   : " << getIP(&info);
+			break;
+		default:
+			os << "Other : " << info.ai_family;
+			break;
+	}
+	
+	os << "Socket               : ";
+	switch (info.ai_socktype)
+	{
+		case 0:
+			os << "Unspecified.";
+			break;
+		case SOCK_STREAM:
+			os << "TCP.";
+			break;
+		case SOCK_DGRAM:
+			os << "UDP.";
+			break;
+		case SOCK_RAW:
+			os << "RAW.";
+			break;
+		case SOCK_RDM:
+			os << "Reliable UDP.";
+			break;
+		case SOCK_SEQPACKET:
+			os << " Pseudo TCP.";
+			break;
+		default:
+			os << "Other : " << info.ai_socktype;
+			break;
+	}
+	
+	os << "Protocol             : ";
+	switch (info.ai_protocol)
+	{
+		case 0:
+			os << "Unspecified.";
+			break;
+		case IPPROTO_TCP:
+			os << "IP TCP.";
+			break;
+		case IPPROTO_UDP:
+			os << "IP UDP.";
+			break;
+		default:
+			os << "Other : " << info.ai_protocol;
+			break;
+	}
+
+	os << "Canonical name       : " << info.ai_canonname;
+	os << "Sockaddr length      : " << info.ai_addrlen;
+	return os.str();
 }
 }
 

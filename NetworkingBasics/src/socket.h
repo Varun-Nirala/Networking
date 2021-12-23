@@ -121,30 +121,36 @@ struct HostInfo
 	}
 };
 
-class Socket
-{
-public:
 #if defined(PLATFORM_WIN)
 	using SOCKET_TYPE = SOCKET;
 #elif defined(PLATFORM_UNIX)
 	using SOCKET_TYPE = int;
-#define INVALID_SOCKET -1
+	#define INVALID_SOCKET -1
 #endif
 
+struct CommData
+{
+	sockaddr_storage		_addr;
+	SOCKET_TYPE				_sId;
+
+	CommData()
+	{
+		std::memset(&_addr, 0, sizeof(sockaddr_storage));
+		_sId = INVALID_SOCKET;
+	}
+};
+
+class Socket
+{
+public:
 	Socket() = default;
 	~Socket() { clear(); };
 
 	Socket(const Socket& sock) = delete;
 	Socket& operator=(const Socket& sock) = delete;
 
-	explicit Socket(const std::string &pAddr, const std::string &pService, bool tcp)
-		: m_address(pAddr.c_str(), pService.c_str(), tcp)
-	{
-		init();
-	}
-
-	explicit Socket(const std::string& pAddr, const std::string& pService, bool tcp, bool ipv4)
-		: m_address(pAddr.c_str(), pService.c_str(), tcp, ipv4)
+	explicit Socket(const std::string& pAddr, const std::string& pService, bool tcp, int family = AF_UNSPEC)
+		: m_address(pAddr.c_str(), pService.c_str(), tcp, family)
 	{
 		init();
 	}
@@ -152,8 +158,7 @@ public:
 	Socket(Socket&& sock) = default;
 	Socket& operator=(Socket && sock) = default;
 
-	inline bool init(const std::string& pAddr, const std::string& pService, bool tcp);
-	inline bool init(const std::string& pAddr, const std::string& pService, bool tcp, bool ipv4);
+	inline bool init(const std::string& pAddr, const std::string& pService, bool tcp, int family = AF_UNSPEC);
 
 	inline void setBacklog(int val) { m_backlog = val; }
 
@@ -164,11 +169,8 @@ public:
 	inline std::string getHostname() const { return m_address.getHostname(); }
 	inline bool isTCP() const { return m_address.isTCP(); }
 	inline bool isIPv4() const { return m_address.isIPv4(); }
-	int getPort() const { return m_address.getPort(); }
-	const std::string getIPAddress() const { return m_address.getIP(); }
-
-	inline int getPort(struct addrinfo* addr) const { return m_address.getPort(addr); }
-	inline std::string getIP(struct addrinfo* addr) const { return m_address.getIP(addr); }
+	int getPort() const { return m_address.port(); }
+	const std::string getIPAddress() const { return m_address.IP(); }
 
 	bool bind();
 	bool listen();
@@ -240,17 +242,10 @@ bool Socket::close()
 	return true;
 }
 
-bool Socket::init(const std::string& pAddr, const std::string& pService, bool tcp)
+bool Socket::init(const std::string& pAddr, const std::string& pService, bool tcp, int family)
 {
 	clear();
-	m_address.init(pAddr.c_str(), pService.c_str(), tcp);
-	return init();
-}
-
-bool Socket::init(const std::string& pAddr, const std::string& pService, bool tcp, bool ipv4)
-{
-	clear();
-	m_address.init(pAddr.c_str(), pService.c_str(), tcp, ipv4);
+	m_address.init(pAddr.c_str(), pService.c_str(), tcp, family);
 	return init();
 }
 
@@ -409,7 +404,7 @@ bool Socket::recvDatagram(SOCKET_TYPE useSocket, struct sockaddr_storage& theirA
 		return false;
 	}
 	m_buffer[recvBytes] = '\0';
-	std::string ip = m_address.getIP((struct addrinfo*)&theirAddr);
+	std::string ip = getIP((struct addrinfo*)&theirAddr);
 	PRINT_MSG("Got packet from : " + ip);
 	PRINT_MSG("Packet length   : " + std::to_string(recvBytes));
 	PRINT_MSG("Packet          : " + std::string(m_buffer.get()));
