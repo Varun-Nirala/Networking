@@ -29,8 +29,8 @@ private:
 private:
 	struct ClientData
 	{
-		sockaddr_storage	_addr;
-		int					_sId;
+		sockaddr_storage		_addr;
+		Socket::SOCKET_TYPE		_sId;
 	};
 
 	Socket						m_socket;
