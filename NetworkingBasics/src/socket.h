@@ -171,6 +171,11 @@ private:
 
 class Socket
 {
+#if defined(PLATFORM_WIN)
+	using SOCKET_TYPE = SOCKET;
+#elif defined(PLATFORM_UNIX)
+	using SOCKET_TYPE = int;
+#endif
 public:
 	Socket() = default;
 	~Socket() { clear(); };
@@ -198,7 +203,7 @@ public:
 
 	inline void setBacklog(int val) { m_backlog = val; }
 
-	inline int getSocketId() const { return m_socketFd; }
+	inline SOCKET_TYPE getSocketId() const { return m_socketFd; }
 	inline bool isActive() const { return !(m_socketFd == -1); }
 
 	inline int getFamily() const { return m_address.getFamily(); }
@@ -213,16 +218,16 @@ public:
 
 	bool bind();
 	bool listen();
-	bool accept(struct sockaddr_storage &theirAddr, int &sId);
+	bool accept(struct sockaddr_storage &theirAddr, SOCKET_TYPE &sId);
 	bool connect();
 
 	void clear();
 
-	bool sendTcp(int toSocketFd, const std::string& msg, int& sentBytes);
-	bool recvTcp(int fromSocketFd, const std::string& msg, const int maxSize);
+	bool sendTcp(SOCKET_TYPE toSocketFd, const std::string& msg, int& sentBytes);
+	bool recvTcp(SOCKET_TYPE fromSocketFd, const std::string& msg, const int maxSize);
 
-	bool sendDatagram(int toSocketFd, const std::string& msg, int& sentBytes);
-	bool recvDatagram(int fromSocketFd, struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize);
+	bool sendDatagram(SOCKET_TYPE toSocketFd, const std::string& msg, int& sentBytes);
+	bool recvDatagram(SOCKET_TYPE fromSocketFd, struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize);
 
 	bool sendTcp(const std::string& msg, int& sentBytes);
 	bool recvTcp(const std::string& msg, const int maxSize);
@@ -253,7 +258,7 @@ protected:
 	};
 
 private:
-	int										m_socketFd{-1};	// Socket file descriptor
+	SOCKET_TYPE								m_socketFd{-1};	// Socket file descriptor
 	Address									m_address;
 	int										m_backlog{5};
 	Buffer									m_buffer;
@@ -436,7 +441,7 @@ bool Socket::listen()
 	return true;
 }
 
-bool Socket::accept(struct sockaddr_storage& theirAddr, int& sId)
+bool Socket::accept(struct sockaddr_storage& theirAddr, SOCKET_TYPE& sId)
 {
 	sId = -1;
 	IF_NOTACTIVE_RETURN(false);
@@ -474,7 +479,7 @@ void Socket::clear()
 	m_buffer.clear();
 }
 
-bool Socket::sendTcp(int toSocketFd, const std::string& msg, int &sentBytes)
+bool Socket::sendTcp(SOCKET_TYPE toSocketFd, const std::string& msg, int &sentBytes)
 {
 	if (msg.empty())
 	{
@@ -497,7 +502,7 @@ bool Socket::sendTcp(int toSocketFd, const std::string& msg, int &sentBytes)
 	return true;
 }
 
-bool Socket::recvTcp(int fromSocketFd, const std::string& msg, const int maxSize)
+bool Socket::recvTcp(SOCKET_TYPE fromSocketFd, const std::string& msg, const int maxSize)
 {
 	if (m_buffer.empty() || m_buffer.size() < maxSize)
 	{
@@ -520,7 +525,7 @@ bool Socket::recvTcp(int fromSocketFd, const std::string& msg, const int maxSize
 	return true;
 }
 
-bool Socket::sendDatagram(int toSocketFd, const std::string & msg, int& sentBytes)
+bool Socket::sendDatagram(SOCKET_TYPE toSocketFd, const std::string & msg, int& sentBytes)
 {
 	sentBytes = ::sendto(toSocketFd, msg.c_str(), msg.size(), 0, m_address.getAddrinfo()->ai_addr, m_address.getAddrinfo()->ai_addrlen);
 	if (sentBytes == -1)
@@ -537,7 +542,7 @@ bool Socket::sendDatagram(int toSocketFd, const std::string & msg, int& sentByte
 	return true;
 }
 
-bool Socket::recvDatagram(int fromSocketFd, struct sockaddr_storage &theirAddr, const std::string& msg, const int maxSize)
+bool Socket::recvDatagram(SOCKET_TYPE fromSocketFd, struct sockaddr_storage &theirAddr, const std::string& msg, const int maxSize)
 {
 	if (m_buffer.empty() || m_buffer.size() < maxSize)
 	{
