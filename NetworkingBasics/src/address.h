@@ -137,10 +137,10 @@ public:
 	Address() = default;
 	~Address() { clear(); }
 	
-	explicit Address(const char* pAddr, const char* pService, bool tcp, int family = AF_UNSPEC);
+	explicit Address(const std::string &pAddr, const std::string &pService, bool tcp, int family = AF_UNSPEC);
 
-	bool init(const char* pAddr, const char* pService, bool tcp, int family);
-	bool init(const char* pAddr, const char* pService, bool tcp);
+	bool init(const std::string &pAddr, const std::string &pService, bool tcp, int family);
+	bool init(const std::string &pAddr, const std::string &pService, bool tcp);
 
 	inline bool empty() const { return m_pServinfo == nullptr && !m_pValidAddress; }
 
@@ -170,27 +170,27 @@ private:
 	struct addrinfo						*m_pValidAddress{};
 };
 
-Address::Address(const char* pAddr, const char* pService, bool tcp, int family)
+Address::Address(const std::string &pAddr, const std::string &pService, bool tcp, int family)
 	: m_szIP(pAddr)
 	, m_szService(pService)
 {
-	init(family, tcp ? SOCK_STREAM : SOCK_DGRAM, !pAddr ? AI_PASSIVE : 0);
+	init(family, tcp ? SOCK_STREAM : SOCK_DGRAM, pAddr.empty() ? AI_PASSIVE : 0);
 }
 
-bool Address::init(const char* pAddr, const char* pService, bool tcp, int family)
+bool Address::init(const std::string &pAddr, const std::string &pService, bool tcp, int family)
 {
 	clear();
 	m_szIP = pAddr;
 	m_szService = pService;
-	return init(family, tcp ? SOCK_STREAM : SOCK_DGRAM, !pAddr ? AI_PASSIVE : 0);
+	return init(family, tcp ? SOCK_STREAM : SOCK_DGRAM, m_szIP.empty() ? AI_PASSIVE : 0);
 }
 
-bool Address::init(const char* pAddr, const char* pService, bool tcp)
+bool Address::init(const std::string &pAddr, const std::string &pService, bool tcp)
 {
 	clear();
 	m_szIP = pAddr;
 	m_szService = pService;
-	return init(AF_UNSPEC, tcp ? SOCK_STREAM : SOCK_DGRAM, !pAddr ? AI_PASSIVE : 0);
+	return init(AF_UNSPEC, tcp ? SOCK_STREAM : SOCK_DGRAM, m_szIP.empty() ? AI_PASSIVE : 0);
 }
 
 inline const addrinfo* Address::getNextAddress()
@@ -205,6 +205,10 @@ inline const addrinfo* Address::getNextAddress()
 void Address::clear()
 {
 	freeaddrinfo(m_pServinfo);
+	if (!m_szIP.empty())
+	{
+		delete m_pValidAddress;
+	}
 	m_pServinfo = m_pValidAddress = nullptr;
 }
 
@@ -214,14 +218,55 @@ bool Address::init(int family, int type, int flags)
 	struct addrinfo hints{};
 	memset(&hints, 0, sizeof(hints));
 
-	hints.ai_family = family;
-	hints.ai_socktype = type;
-	hints.ai_flags = flags;
-	hints.ai_protocol = 0;
+	hints.ai_family = family;								//AF_UNSPEC;     /* Allow IPv4 or IPv6 */
+	hints.ai_socktype = type;								//SOCK_DGRAM or SOCK_STREAM;
+	hints.ai_flags = flags;									//AI_PASSIVE;    /* For wildcard IP address */
+	hints.ai_protocol = 0;									//0				 /* for Any protocol */
 	hints.ai_canonname = nullptr;
 	hints.ai_addr = nullptr;
 	hints.ai_next = nullptr;
+	if (!m_szIP.empty())
+	{
+		m_pValidAddress = new addrinfo();
+		memset(m_pValidAddress, 0, sizeof(addrinfo));
+		memcpy(m_pValidAddress, &hints, sizeof(hints));
 
+		int ret = inet_pton(hints.ai_family, m_szIP.c_str(), &(m_pValidAddress->ai_addr));
+		if (ret == 0)
+		{
+			PRINT_MSG("Invalid address in the specified address family. Address : " + m_szIP);
+			// Invalid address in the specified address family
+			return false;
+		}
+		else if (ret == -1)
+		{
+			// Invalid address family
+			PRINT_MSG("Invalid address family. Address : " + m_szIP);
+			return false;
+		}
+		return true;
+
+		/*
+		struct sockaddr_in sa;
+		char str[INET_ADDRSTRLEN];
+		// now get it back and print it
+		inet_ntop(AF_INET, &(sa.sin_addr), str, INET_ADDRSTRLEN);
+
+		printf("%s\n", str); // prints "192.0.2.33"
+		// IPv6 demo of inet_ntop() and inet_pton()
+		// (basically the same except with a bunch of 6s thrown around)
+
+		struct sockaddr_in6 sa;
+		char str[INET6_ADDRSTRLEN];
+		// store this IP address in sa:
+		inet_pton(AF_INET6, "2001:db8:8714:3a90::12", &(sa.sin6_addr));
+
+		// now get it back and print it
+		inet_ntop(AF_INET6, &(sa.sin6_addr), str, INET6_ADDRSTRLEN);
+
+		printf("%s\n", str); // prints "2001:db8:8714:3a90::12"
+		*/
+	}
 	const char* paddr = m_szIP.empty() ? nullptr : m_szIP.c_str();
 	const char* pservice = m_szService.empty() ? nullptr : m_szService.c_str();
 
@@ -291,7 +336,7 @@ inline std::string getPortIP(const struct addrinfo* addr)
 inline std::string asString(const struct addrinfo &info)
 {
 	std::ostringstream os;
-	os << "\nFlags                : 0x" << std::hex << info.ai_flags;
+	os << "\nFlags                : 0x" << std::hex << info.ai_flags << std::dec;
 	os << "\nFamily               : ";
 	switch (info.ai_family)
 	{

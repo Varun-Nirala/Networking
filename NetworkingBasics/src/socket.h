@@ -124,7 +124,7 @@ public:
 	Socket& operator=(const Socket& sock) = delete;
 
 	explicit Socket(const std::string& pAddr, const std::string& pService, bool tcp, int family = AF_UNSPEC)
-		: m_address(pAddr.c_str(), pService.c_str(), tcp, family)
+		: m_address(pAddr, pService, tcp, family)
 	{
 		init();
 	}
@@ -219,7 +219,7 @@ bool Socket::close()
 bool Socket::init(const std::string& pAddr, const std::string& pService, bool tcp, int family)
 {
 	clear();
-	m_address.init(pAddr.c_str(), pService.c_str(), tcp, family);
+	m_address.init(pAddr, pService, tcp, family);
 	return init();
 }
 
