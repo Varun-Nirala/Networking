@@ -64,32 +64,6 @@ struct in6_addr
 	char				__ss_pad2[_SS_PAD2SIZE];
 };
 */
-#if defined(PLATFORM_WIN)
-inline bool onetimeSetup()
-{
-	static bool bInitialized = false;
-	if (!bInitialized)
-	{
-		WSADATA wsa;
-		PRINT_MSG("One time initialisation of Winsock...");
-		if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
-		{
-			PRINT_MSG("Failed in initialisation of Winsock. Error Code : " + std::to_string(WSAGetLastError()));
-			return false;
-		}
-		bInitialized = true;
-	}
-	return true;
-}
-int getErrorCode() { return WSAGetLastError(); }
-#endif
-#if defined(PLATFORM_UNIX)
-inline bool onetimeSetup() { return true; }
-inline int getErrorCode() { return errno; }
-#endif
-
-
-
 #define IF_NOTACTIVE_RETURN(x)              \
   do {                                      \
     if (!isActive()) {                      \

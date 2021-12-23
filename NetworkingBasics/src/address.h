@@ -102,6 +102,30 @@ struct hostent {
 }
 */
 
+#if defined(PLATFORM_WIN)
+	inline bool onetimeSetup()
+	{
+		static bool bInitialized = false;
+		if (!bInitialized)
+		{
+			WSADATA wsa;
+			PRINT_MSG("One time initialisation of Winsock...");
+			if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+			{
+				PRINT_MSG("Failed in initialisation of Winsock. Error Code : " + std::to_string(WSAGetLastError()));
+				return false;
+			}
+			bInitialized = true;
+		}
+		return true;
+	}
+	inline int getErrorCode() { return WSAGetLastError(); }
+#endif
+#if defined(PLATFORM_UNIX)
+	inline bool onetimeSetup() { return true; }
+	inline int getErrorCode() { return errno; }
+#endif
+
 inline std::string asString(const struct addrinfo& info);
 inline std::string getIP(const struct addrinfo* addr);
 inline int getPort(const struct addrinfo* addr);
@@ -186,6 +210,7 @@ void Address::clear()
 
 bool Address::init(int family, int type, int flags)
 {
+	onetimeSetup();
 	struct addrinfo hints{};
 	memset(&hints, 0, sizeof(hints));
 
@@ -244,6 +269,7 @@ inline std::string getIP(const struct addrinfo* addr)
 {
 	void* ptr{};
 	char ipstr[INET6_ADDRSTRLEN];
+	memset(ipstr, 0, INET6_ADDRSTRLEN);
 	if (addr->ai_family == AF_INET)
 	{
 		ptr = &(((struct sockaddr_in*)addr->ai_addr)->sin_addr);
@@ -252,21 +278,21 @@ inline std::string getIP(const struct addrinfo* addr)
 	{
 		ptr = &(((struct sockaddr_in6*)addr->ai_addr)->sin6_addr);
 	}
-	inet_ntop(addr->ai_family, ptr, ipstr, sizeof(INET6_ADDRSTRLEN));
+	inet_ntop(addr->ai_family, ptr, ipstr, INET6_ADDRSTRLEN);
 
 	return std::string(ipstr);
 }
 
 inline std::string getPortIP(const struct addrinfo* addr)
 {
-	return getIP(addr) + ":" + std::to_string(getPort(addr));
+	return getIP(addr) + " : " + std::to_string(getPort(addr));
 }
 
 inline std::string asString(const struct addrinfo &info)
 {
 	std::ostringstream os;
-	os << "Flags                : 0x" << std::hex << info.ai_flags;
-	os << "Family               : ";
+	os << "\nFlags                : 0x" << std::hex << info.ai_flags;
+	os << "\nFamily               : ";
 	switch (info.ai_family)
 	{
 		case AF_UNSPEC:
@@ -283,7 +309,7 @@ inline std::string asString(const struct addrinfo &info)
 			break;
 	}
 	
-	os << "Socket               : ";
+	os << "\nSocket               : ";
 	switch (info.ai_socktype)
 	{
 		case 0:
@@ -309,7 +335,7 @@ inline std::string asString(const struct addrinfo &info)
 			break;
 	}
 	
-	os << "Protocol             : ";
+	os << "\nProtocol             : ";
 	switch (info.ai_protocol)
 	{
 		case 0:
@@ -326,8 +352,9 @@ inline std::string asString(const struct addrinfo &info)
 			break;
 	}
 
-	os << "Canonical name       : " << info.ai_canonname;
-	os << "Sockaddr length      : " << info.ai_addrlen;
+	os << "\nCanonical name       : " << (info.ai_canonname == nullptr) ? "nullptr" : info.ai_canonname;
+	
+	os << "\nSockaddr length      : " << info.ai_addrlen;
 	return os.str();
 }
 }
