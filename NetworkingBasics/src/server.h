@@ -10,6 +10,7 @@ class Server
 {
 public:
 	Server() = default;
+	~Server() = default;
 
 	bool initConnection(const std::string& addr, const std::string& port, bool tcp, bool ipv4);
 	bool initConnection(const std::string& addr, const std::string& port, bool tcp);
@@ -47,13 +48,14 @@ bool Server::initConnection(const std::string& addr, const std::string& port, bo
 		PRINT_MSG("Got socket : " + std::to_string(m_socket.getSocketId()));
 		if (tcp)
 		{
-			initTCP();
+			return initTCP();
 		}
 		else
 		{
-			initUDP();
+			return initUDP();
 		}
 	}
+	return false;
 }
 
 bool Server::initConnection(const std::string& addr, const std::string& port, bool tcp)
@@ -92,7 +94,7 @@ bool Server::accept()
 	ClientData client;
 	if (m_socket.accept(client._addr, client._sId))
 	{
-		PRINT_MSG("Server accepted connect request from ID : " + std::to_string(client._sId) + " : " + m_socket.getIP(client._addr));
+		PRINT_MSG("Server accepted connect request from ID : " + std::to_string(client._sId) + " : " + m_socket.getIP((addrinfo *)(&client._addr)));
 		m_clients.emplace_back(client);
 		return true;
 	}

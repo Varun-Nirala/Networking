@@ -9,6 +9,8 @@ class Client
 {
 public:
 	Client() = default;
+	~Client() = default;
+
 	bool initConnection(const std::string& addr, const std::string& port, bool tcp, bool ipv4);
 	bool initConnection(const std::string& addr, const std::string& port, bool tcp);
 
@@ -32,13 +34,14 @@ bool Client::initConnection(const std::string& addr, const std::string& port, bo
 		PRINT_MSG("Got socket : " + std::to_string(m_socket.getSocketId()));
 		if (tcp)
 		{
-			initTCP();
+			return initTCP();
 		}
 		else
 		{
-			initUDP();
+			return initUDP();
 		}
 	}
+	return false;
 }
 
 bool Client::initConnection(const std::string& addr, const std::string& port, bool tcp)
@@ -105,12 +108,14 @@ bool Client::initTCP()
 	if (m_socket.connect())
 	{
 		PRINT_MSG("Socket connect success.");
+		return true;
 	}
+	return false;
 }
 
 bool Client::initUDP()
 {
-	//Noting required;
+	return true;//Noting required;
 }
 }
 #endif // #ifndef __CLIENT_H__

@@ -1,13 +1,24 @@
 #ifndef __SOCKET_H__
 #define __SOCKET_H__
 
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
-#include <netdb.h>
-#include <unistd.h>
+#if defined(_WIN32) || defined(_WIN64)
+	#define PLATFORM_WIN
+#else
+	#define PLATFORM_UNIX
+#endif
+
+#if defined(PLATFORM_WIN)
+	#include <winsock2.h>
+	#include <ws2tcpip.h>
+#elif defined(PLATFORM_UNIX)
+	#include <sys/socket.h>
+	#include <arpa/inet.h>
+	#include <sys/types.h>
+	#include <netinet/in.h>
+	#include <netinet/ip.h>
+	#include <netdb.h>
+	#include <unistd.h>
+#endif
 #include <cerrno>
 #include <cstring>
 #include <cstdlib>
@@ -15,8 +26,11 @@
 #include <string>
 #include <memory>
 
-
 #include "helper.h"
+
+#if defined(PLATFORM_WIN)
+	#pragma comment(lib,"ws2_32.lib") 
+#endif
 
 namespace nsNW
 {
@@ -78,13 +92,39 @@ struct in6_addr
 	char				__ss_pad2[_SS_PAD2SIZE];
 };
 */
+#if defined(PLATFORM_WIN)
+inline bool onetimeSetup()
+{
+	static bool bInitialized = false;
+	if (!bInitialized)
+	{
+		WSADATA wsa;
+		PRINT_MSG("One time initialisation of Winsock...");
+		if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+		{
+			PRINT_MSG("Failed in initialisation of Winsock. Error Code : " + std::to_string(WSAGetLastError()));
+			return false;
+		}
+		bInitialized = true;
+	}
+	return true;
+}
+int getErrorCode() { return WSAGetLastError(); }
+#endif
+#if defined(PLATFORM_UNIX)
+inline bool onetimeSetup() { return true; }
+inline int getErrorCode() { return errno; }
+#endif
 
-#define IF_NOTACTIVE_RETURN(x) ({\
-			if (!isActive())\
-			{\
-				LOG_ERROR("No active socket.");\
-				return x;\
-			}})
+
+
+#define IF_NOTACTIVE_RETURN(x)              \
+  do {                                      \
+    if (!isActive()) {                      \
+      LOG_ERROR("Socket not active.");      \
+      return x;                             \
+    }                                       \
+  } while (0);
 
 class Address
 {
@@ -132,10 +172,11 @@ private:
 class Socket
 {
 public:
+	Socket() = default;
+	~Socket() { clear(); };
+
 	Socket(const Socket& sock) = delete;
 	Socket& operator=(const Socket& sock) = delete;
-
-	~Socket() { clear(); };
 
 	explicit Socket(const std::string &pAddr, const std::string &pService, bool tcp)
 		: m_address(pAddr.c_str(), pService.c_str(), tcp)
@@ -149,11 +190,11 @@ public:
 		init();
 	}
 
-	bool init(const std::string& pAddr, const std::string& pService, bool tcp);
-	bool init(const std::string& pAddr, const std::string& pService, bool tcp, bool ipv4);
-
 	Socket(Socket&& sock) = default;
-	Socket& operator=(Socket&& sock) = default;
+	Socket& operator=(Socket && sock) = default;
+
+	inline bool init(const std::string& pAddr, const std::string& pService, bool tcp);
+	inline bool init(const std::string& pAddr, const std::string& pService, bool tcp, bool ipv4);
 
 	inline void setBacklog(int val) { m_backlog = val; }
 
@@ -300,7 +341,7 @@ bool Address::init(int family, int type, int flags)
 	hints.ai_socktype = type;
 	hints.ai_flags = flags;
 
-	fillAddressInfo(m_szIP.c_str(), m_szService.c_str(), hints);
+	return fillAddressInfo(m_szIP.c_str(), m_szService.c_str(), hints);
 }
 
 bool Address::fillAddressInfo(const char* pService, const char* pAdd, struct addrinfo &hints)
@@ -338,10 +379,19 @@ void Address::print() const
 bool Socket::close()
 {
 	IF_NOTACTIVE_RETURN(true);
-	if (::close(m_socketFd) != 0)
+	int ret{};
+
+#if defined(PLATFORM_WIN)
+	ret = closesocket(m_socketFd);
+	WSACleanup();
+#else
+	ret = ::close(m_socketFd);
+#endif
+
+	if (ret != 0)
 	{
 		m_socketFd = -1;
-		LOG_ERROR("Socket close error. Error code : " + std::to_string(errno));
+		LOG_ERROR("Socket close error. Error code : " + std::to_string(getErrorCode()));
 		return false;
 	}
 	m_socketFd = -1;
@@ -368,7 +418,7 @@ bool Socket::bind()
 	IF_NOTACTIVE_RETURN(false);
 	if (::bind(m_socketFd, m_address.getAddrinfo()->ai_addr, m_address.getAddrinfo()->ai_addrlen) == -1)
 	{
-		LOG_ERROR("Socket bind error. Error code : " + std::to_string(errno));
+		LOG_ERROR("Socket bind error. Error code : " + std::to_string(getErrorCode()));
 		return false;
 	}
 	PRINT_MSG("Socket bind success.");
@@ -379,7 +429,7 @@ bool Socket::listen()
 {
 	if (::listen(m_socketFd, m_backlog) == -1)
 	{
-		LOG_ERROR("Socket listen error. Error code : " + std::to_string(errno));
+		LOG_ERROR("Socket listen error. Error code : " + std::to_string(getErrorCode()));
 		return false;
 	}
 	PRINT_MSG("Socket listen success.");
@@ -389,7 +439,7 @@ bool Socket::listen()
 bool Socket::accept(struct sockaddr_storage& theirAddr, int& sId)
 {
 	sId = -1;
-	IF_NOTACTIVE_RETURN(-1);
+	IF_NOTACTIVE_RETURN(false);
 	
 	socklen_t addr_size = sizeof(theirAddr);
 	memset(&theirAddr, 0, addr_size);
@@ -397,7 +447,7 @@ bool Socket::accept(struct sockaddr_storage& theirAddr, int& sId)
 	sId = ::accept(m_socketFd, (struct sockaddr*)&theirAddr, &addr_size);
 	if (sId == -1)
 	{
-		LOG_ERROR("Connection accept error. Error code : " + std::to_string(errno));
+		LOG_ERROR("Connection accept error. Error code : " + std::to_string(getErrorCode()));
 		return sId;
 	}
 	PRINT_MSG("Connection accepted. Their socket ID : " + std::to_string(sId));
@@ -410,7 +460,7 @@ bool Socket::connect()
 
 	if (::connect(m_socketFd, m_address.getAddrinfo()->ai_addr, m_address.getAddrinfo()->ai_addrlen) == -1)
 	{
-		LOG_ERROR("Socket connect error. Error code : " + std::to_string(errno));
+		LOG_ERROR("Socket connect error. Error code : " + std::to_string(getErrorCode()));
 		return false;
 	}
 	PRINT_MSG("Socket connect success.");
@@ -435,7 +485,7 @@ bool Socket::sendTcp(int toSocketFd, const std::string& msg, int &sentBytes)
 	sentBytes = ::send(toSocketFd, msg.c_str(), msg.size(), 0);
 	if (sentBytes == -1)
 	{
-		LOG_ERROR("Send error. Error code : " + std::to_string(errno));
+		LOG_ERROR("Send error. Error code : " + std::to_string(getErrorCode()));
 		return false;
 	}
 	else if (sentBytes == 0)
@@ -456,7 +506,7 @@ bool Socket::recvTcp(int fromSocketFd, const std::string& msg, const int maxSize
 	int recvBytes = ::recv(fromSocketFd, m_buffer.get(), maxSize - 1, 0);
 	if (recvBytes == -1)
 	{
-		LOG_ERROR("Recieve error. Error code : " + std::to_string(errno));
+		LOG_ERROR("Recieve error. Error code : " + std::to_string(getErrorCode()));
 		return false;
 	}
 	else if (recvBytes == 0)
@@ -472,10 +522,10 @@ bool Socket::recvTcp(int fromSocketFd, const std::string& msg, const int maxSize
 
 bool Socket::sendDatagram(int toSocketFd, const std::string & msg, int& sentBytes)
 {
-	sentBytes = ::sendto(toSocketFd, msg.c_str(), msg.size(), MSG_CONFIRM, m_address.getAddrinfo()->ai_addr, m_address.getAddrinfo()->ai_addrlen);
+	sentBytes = ::sendto(toSocketFd, msg.c_str(), msg.size(), 0, m_address.getAddrinfo()->ai_addr, m_address.getAddrinfo()->ai_addrlen);
 	if (sentBytes == -1)
 	{
-		LOG_ERROR("Send error. Error code : " + std::to_string(errno));
+		LOG_ERROR("Send error. Error code : " + std::to_string(getErrorCode()));
 		return false;
 	}
 	else if (sentBytes == 0)
@@ -496,11 +546,11 @@ bool Socket::recvDatagram(int fromSocketFd, struct sockaddr_storage &theirAddr, 
 	socklen_t addr_size = sizeof(theirAddr);
 	memset(&theirAddr, 0, addr_size);
 
-	int recvBytes = ::recvfrom(fromSocketFd, m_buffer.get(), maxSize - 1, MSG_WAITALL, (struct sockaddr*)&theirAddr, &addr_size);
+	int recvBytes = ::recvfrom(fromSocketFd, m_buffer.get(), maxSize - 1, 0, (struct sockaddr*)&theirAddr, &addr_size);
 
 	if (recvBytes == -1)
 	{
-		LOG_ERROR("Recieve error. Error code : " + std::to_string(errno));
+		LOG_ERROR("Recieve error. Error code : " + std::to_string(getErrorCode()));
 		return false;
 	}
 	m_buffer[recvBytes] = '\0';
@@ -539,7 +589,7 @@ bool Socket::recvDatagram(const std::string& msg, const int maxSize)
 
 bool Socket::init()
 {
-	if (!getValidSocket() || !setSocketOptions(true, true))
+	if (!onetimeSetup() || !getValidSocket() || !setSocketOptions(true, true))
 	{
 		LOG_ERROR("Socket setup error.");
 		return false;
@@ -580,11 +630,13 @@ bool Socket::setSocketOptions(bool reuseAddr, bool reusePort)
 	{
 		option = SO_REUSEADDR;
 	}
-	if (reusePort)
-	{
-		option = option | SO_REUSEPORT;
-	}
-	int ret = setsockopt(m_socketFd, SOL_SOCKET, option, &optVal, sizeof(optVal));
+	#if defined(PLATFORM_UNIX)
+		if (reusePort)
+		{
+			option = option | SO_REUSEPORT;
+		}
+	#endif
+	int ret = ::setsockopt(m_socketFd, SOL_SOCKET, option, (char *)&optVal, sizeof(optVal));
 	if (ret == -1)
 	{
 		LOG_ERROR("Socket option settting error. Error code : " + std::to_string(ret));
