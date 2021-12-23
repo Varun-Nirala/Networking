@@ -98,6 +98,29 @@ inline int getErrorCode() { return errno; }
     }                                       \
   } while (0);
 
+
+struct HostInfo
+{
+	std::string					m_ip;
+	std::string					m_hostname;
+	std::vector<std::string>	m_aliasList;
+	std::vector<struct in_addr> m_addrList;
+	std::vector<std::string>	m_addrListString;
+
+	inline bool empty() const
+	{
+		return m_hostname.empty();
+	}
+
+	inline void clear()
+	{
+		m_ip.clear();
+		m_hostname.clear();
+		m_aliasList.clear();
+		m_addrListString.clear();
+	}
+};
+
 class Socket
 {
 public:
@@ -154,18 +177,17 @@ public:
 
 	void clear();
 
-	bool sendTcp(SOCKET_TYPE toSocketFd, const std::string& msg, int& sentBytes);
-	bool recvTcp(SOCKET_TYPE fromSocketFd, const std::string& msg, const int maxSize);
-
-	bool sendDatagram(SOCKET_TYPE toSocketFd, const std::string& msg, int& sentBytes);
-	bool recvDatagram(SOCKET_TYPE fromSocketFd, struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize);
-
+	bool sendTcp(SOCKET_TYPE useSocket, const std::string& msg, int& sentBytes);
 	bool sendTcp(const std::string& msg, int& sentBytes);
+
+	bool recvTcp(SOCKET_TYPE useSocket, const std::string& msg, const int maxSize);
 	bool recvTcp(const std::string& msg, const int maxSize);
 
-	bool sendDatagram(const std::string& msg, int& sentBytes);
+	bool sendDatagram(SOCKET_TYPE useSocket, struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes);
+	bool sendDatagram(struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes);
+
+	bool recvDatagram(SOCKET_TYPE useSocket, struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize);
 	bool recvDatagram(struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize);
-	bool recvDatagram(const std::string& msg, const int maxSize);
 
 protected:
 	bool close();
@@ -293,7 +315,7 @@ void Socket::clear()
 	m_buffer.clear();
 }
 
-bool Socket::sendTcp(SOCKET_TYPE toSocketFd, const std::string& msg, int &sentBytes)
+bool Socket::sendTcp(SOCKET_TYPE useSocket, const std::string& msg, int& sentBytes)
 {
 	if (msg.empty())
 	{
@@ -301,7 +323,7 @@ bool Socket::sendTcp(SOCKET_TYPE toSocketFd, const std::string& msg, int &sentBy
 		return false;
 	}
 
-	sentBytes = ::send(toSocketFd, msg.c_str(), msg.size(), 0);
+	sentBytes = ::send(useSocket, msg.c_str(), msg.size(), 0);
 	if (sentBytes == -1)
 	{
 		LOG_ERROR("Send error. Error code : " + std::to_string(getErrorCode()));
@@ -309,20 +331,25 @@ bool Socket::sendTcp(SOCKET_TYPE toSocketFd, const std::string& msg, int &sentBy
 	}
 	else if (sentBytes == 0)
 	{
-		LOG_ERROR("Connectioned closed by server on socket : " + std::to_string(toSocketFd));
+		LOG_ERROR("Connectioned closed by server on socket : " + std::to_string(useSocket));
 		return false;
 	}
 	PRINT_MSG("Sent byte count : " + std::to_string(sentBytes));
 	return true;
 }
 
-bool Socket::recvTcp(SOCKET_TYPE fromSocketFd, const std::string& msg, const int maxSize)
+bool Socket::sendTcp(const std::string& msg, int& sentBytes)
+{
+	return sendTcp(m_socketFd, msg, sentBytes);
+}
+
+bool Socket::recvTcp(SOCKET_TYPE useSocket, const std::string& msg, const int maxSize)
 {
 	if (m_buffer.empty() || m_buffer.size() < maxSize)
 	{
 		m_buffer.init(maxSize);
 	}
-	int recvBytes = ::recv(fromSocketFd, m_buffer.get(), maxSize - 1, 0);
+	int recvBytes = ::recv(useSocket, m_buffer.get(), maxSize - 1, 0);
 	if (recvBytes == -1)
 	{
 		LOG_ERROR("Recieve error. Error code : " + std::to_string(getErrorCode()));
@@ -330,18 +357,22 @@ bool Socket::recvTcp(SOCKET_TYPE fromSocketFd, const std::string& msg, const int
 	}
 	else if (recvBytes == 0)
 	{
-		LOG_ERROR("Connectioned closed by server on socket : " + std::to_string(fromSocketFd));
+		LOG_ERROR("Connectioned closed by server on socket : " + std::to_string(useSocket));
 		return false;
 	}
-
 	PRINT_MSG("Packet length   : " + std::to_string(recvBytes));
 	PRINT_MSG("Packet          : " + std::string(m_buffer.get()));
 	return true;
 }
 
-bool Socket::sendDatagram(SOCKET_TYPE toSocketFd, const std::string & msg, int& sentBytes)
+bool Socket::recvTcp(const std::string& msg, const int maxSize)
 {
-	sentBytes = ::sendto(toSocketFd, msg.c_str(), msg.size(), 0, m_address.getAddrinfo()->ai_addr, m_address.getAddrinfo()->ai_addrlen);
+	return recvTcp(m_socketFd, msg, maxSize);
+}
+
+bool Socket::sendDatagram(SOCKET_TYPE useSocket, struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes)
+{
+	sentBytes = ::sendto(useSocket, msg.c_str(), msg.size(), 0, m_address.getAddrinfo()->ai_addr, m_address.getAddrinfo()->ai_addrlen);
 	if (sentBytes == -1)
 	{
 		LOG_ERROR("Send error. Error code : " + std::to_string(getErrorCode()));
@@ -349,14 +380,19 @@ bool Socket::sendDatagram(SOCKET_TYPE toSocketFd, const std::string & msg, int& 
 	}
 	else if (sentBytes == 0)
 	{
-		LOG_ERROR("Connectioned closed by server on socket : " + std::to_string(toSocketFd));
+		LOG_ERROR("Connectioned closed by server on socket : " + std::to_string(useSocket));
 		return false;
 	}
 	PRINT_MSG("Sent byte count : " + std::to_string(sentBytes));
 	return true;
 }
 
-bool Socket::recvDatagram(SOCKET_TYPE fromSocketFd, struct sockaddr_storage &theirAddr, const std::string& msg, const int maxSize)
+bool Socket::sendDatagram(struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes)
+{
+	return sendDatagram(m_socketFd, theirAddr, msg, sentBytes);
+}
+
+bool Socket::recvDatagram(SOCKET_TYPE useSocket, struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize)
 {
 	if (m_buffer.empty() || m_buffer.size() < maxSize)
 	{
@@ -365,7 +401,7 @@ bool Socket::recvDatagram(SOCKET_TYPE fromSocketFd, struct sockaddr_storage &the
 	socklen_t addr_size = sizeof(theirAddr);
 	memset(&theirAddr, 0, addr_size);
 
-	int recvBytes = ::recvfrom(fromSocketFd, m_buffer.get(), maxSize - 1, 0, (struct sockaddr*)&theirAddr, &addr_size);
+	int recvBytes = ::recvfrom(useSocket, m_buffer.get(), maxSize - 1, 0, (struct sockaddr*)&theirAddr, &addr_size);
 
 	if (recvBytes == -1)
 	{
@@ -380,29 +416,8 @@ bool Socket::recvDatagram(SOCKET_TYPE fromSocketFd, struct sockaddr_storage &the
 	return true;
 }
 
-bool Socket::sendTcp(const std::string& msg, int& sentBytes)
-{
-	return sendTcp(m_socketFd, msg, sentBytes);
-}
-
-bool Socket::recvTcp(const std::string& msg, const int maxSize)
-{
-	return recvTcp(m_socketFd, msg, maxSize);
-}
-
-bool Socket::sendDatagram(const std::string& msg, int& sentBytes)
-{
-	return sendDatagram(m_socketFd, msg, sentBytes);
-}
-
 bool Socket::recvDatagram(struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize)
 {
-	return recvDatagram(m_socketFd, theirAddr, msg, maxSize);
-}
-
-bool Socket::recvDatagram(const std::string& msg, const int maxSize)
-{
-	sockaddr_storage theirAddr;
 	return recvDatagram(m_socketFd, theirAddr, msg, maxSize);
 }
 
@@ -423,7 +438,7 @@ bool Socket::getValidSocket()
 	const struct addrinfo* p = m_address.getNextAddress();
 	while (p)
 	{
-		m_socketFd = socket(p->ai_family, p->ai_family, p->ai_protocol);
+		m_socketFd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 		if (m_socketFd != -1)
 		{
 			break;

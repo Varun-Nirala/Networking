@@ -91,6 +91,14 @@ struct in6_addr
 	int64_t				__ss_align;
 	char				__ss_pad2[_SS_PAD2SIZE];
 };
+
+struct hostent {
+	char  *h_name;            official name of host
+	char** h_aliases;         alias list
+	int    h_addrtype;        host address type
+	int    h_length;          length of address
+	char** h_addr_list;       list of addresses
+}
 */
 class Address
 {
@@ -124,10 +132,12 @@ public:
 	inline void clear();
 	inline void print() const;
 
+
+
 private:
 	
 	inline bool init(int family, int type, int flags);
-	inline bool fillAddressInfo(const char* pService, const char* pAddr, struct addrinfo &hints);
+	inline bool fillAddressInfo(const char* pAddr, const char* pService, struct addrinfo &hints);
 private:
 	std::string							m_szIP;			// e.g "www.example.com" or IP
 	std::string							m_szService;	// e.g. "http" or port number
@@ -214,11 +224,15 @@ bool Address::init(int family, int type, int flags)
 	hints.ai_family = family;
 	hints.ai_socktype = type;
 	hints.ai_flags = flags;
+	hints.ai_protocol = 0;
+	hints.ai_canonname = nullptr;
+	hints.ai_addr = nullptr;
+	hints.ai_next = nullptr;
 
 	return fillAddressInfo(m_szIP.c_str(), m_szService.c_str(), hints);
 }
 
-bool Address::fillAddressInfo(const char* pService, const char* pAdd, struct addrinfo &hints)
+bool Address::fillAddressInfo(const char* pAdd, const char* pService, struct addrinfo &hints)
 {
 	if (m_pServinfo)
 	{
