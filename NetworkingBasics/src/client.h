@@ -12,91 +12,195 @@ public:
 	Client() = default;
 	~Client() = default;
 
-	inline bool initConnection(const std::string& addr, const std::string& port, bool tcp, bool ipv4);
-	inline bool initConnection(const std::string& addr, const std::string& port, bool tcp);
+	inline bool connectTo(const std::string& addr, const std::string& port, bool tcp, bool ipv4, std::string &serverName);
+	inline bool connectTo(const std::string& addr, const std::string& port, bool tcp, std::string& serverName);
 
-	bool read(std::string& msg, const int maxSize = 1000);
-	bool write(std::string to, std::string& msg);
+	inline SOCKET_TYPE getSocketId(const std::string serverName) const;
+	inline std::string getIPAddress(const std::string serverName) const;
+	inline int getPort(const std::string serverName) const;
+	inline int getFamily(const std::string serverName) const;
+	inline std::string getHostname(const std::string serverName) const;
+	inline bool isTCP(const std::string serverName) const;
+	inline bool isIPv4(const std::string serverName) const;
+
+	bool read(const std::string from, std::string& msg, const int maxSize = 1000);
+	bool write(const std::string to, std::string& msg);
 
 	void print() const;
 private:
-	inline bool initTCP(Socket &socket, const std::string& addr, const std::string& port, int family);
-	inline bool initUDP(Socket &socket, const std::string& addr, const std::string& port, int family);
+	bool addServer(Socket& socket, std::string& serverName, const std::string& msg);
+
+	inline bool initTCP(const std::string& addr, const std::string& port, int family, std::string& serverName);
+	inline bool initUDP(const std::string& addr, const std::string& port, int family, std::string& serverName);
 
 private:
 	Socket											m_socket;
-	std::unordered_map<std::string, CommData>		m_servers;
+	std::unordered_map<std::string, Socket>			m_servers;
 };
 
-bool Client::initConnection(const std::string& addr, const std::string& port, bool tcp, bool ipv4)
+bool Client::connectTo(const std::string& addr, const std::string& port, bool tcp, bool ipv4, std::string& serverName)
 {
-	return tcp ? initTCP(m_socket, addr, port, ipv4 ? AF_INET : AF_INET6) : initUDP(m_socket, addr, port, ipv4 ? AF_INET : AF_INET6);
+	return tcp ? initTCP(addr, port, ipv4 ? AF_INET : AF_INET6, serverName) : initUDP(addr, port, ipv4 ? AF_INET : AF_INET6, serverName);
 }
 
-bool Client::initConnection(const std::string& addr, const std::string& port, bool tcp)
+bool Client::connectTo(const std::string& addr, const std::string& port, bool tcp, std::string& serverName)
 {
-	return tcp ? initTCP(m_socket, addr, port, AF_UNSPEC) : initUDP(m_socket, addr, port, AF_UNSPEC);
+	return tcp ? initTCP(addr, port, AF_UNSPEC, serverName) : initUDP(addr, port, AF_UNSPEC, serverName);
 }
 
-bool Client::read(std::string& msg, const int maxSize)
+SOCKET_TYPE Client::getSocketId(const std::string serverName) const
 {
-	bool ret{};
-	if (m_socket.isTCP())
+	if (m_servers.count(serverName))
 	{
-		ret = m_socket.recvTcp(msg, maxSize);
+		return m_servers.at(serverName).getSocketId();
+	}
+	PRINT_MSG("No such server. Server : " + serverName);
+	return INVALID_SOCKET;
+}
+
+std::string Client::getIPAddress(const std::string serverName) const
+{
+	if (m_servers.count(serverName))
+	{
+		return m_servers.at(serverName).getIPAddress();
+	}
+	PRINT_MSG("No such server. Server : " + serverName);
+	return "";
+}
+
+int Client::getPort(const std::string serverName) const
+{
+	if (m_servers.count(serverName))
+	{
+		return m_servers.at(serverName).getPort();
+	}
+	PRINT_MSG("No such server. Server : " + serverName);
+	return 0;
+}
+
+int Client::getFamily(const std::string serverName) const
+{
+	if (m_servers.count(serverName))
+	{
+		return m_servers.at(serverName).getFamily();
+	}
+	PRINT_MSG("No such server. Server : " + serverName);
+	return -1;
+}
+
+std::string Client::getHostname(const std::string serverName) const
+{
+	if (m_servers.count(serverName))
+	{
+		return m_servers.at(serverName).getHostname();
+	}
+	PRINT_MSG("No such server. Server : " + serverName);
+	return "";
+}
+
+bool Client::isTCP(const std::string serverName) const
+{
+	if (m_servers.count(serverName))
+	{
+		return m_servers.at(serverName).isTCP();
+	}
+	PRINT_MSG("No such server. Server : " + serverName);
+	return false;
+}
+
+bool Client::isIPv4(const std::string serverName) const
+{
+	if (m_servers.count(serverName))
+	{
+		return m_servers.at(serverName).isIPv4();
+	}
+	PRINT_MSG("No such server. Server : " + serverName);
+	return false;
+}
+
+bool Client::read(const std::string from, std::string& msg, const int maxSize)
+{
+	bool ret{ false };
+
+	if (m_servers.count(from))
+	{
+		Socket& data = m_servers.at(from);
+		if (data.isTCP())
+		{
+			ret = data.recvTcp(msg, maxSize);
+		}
+		else
+		{
+			sockaddr_storage ss;
+			ret = data.recvDatagram(ss, msg, maxSize);
+		}
+		PRINT_MSG("Recieved : " + msg);
 	}
 	else
 	{
-		std::string serverId;
-		CommData data;
-		ret = m_socket.recvDatagram(data._addr, msg, maxSize);
-		serverId = getPortIP((addrinfo*)&data._addr);
-		m_servers[serverId] = data;
-		PRINT_MSG("Server Id : " + serverId);
+		LOG_ERROR("No such connection : " + from);
 	}
-
-	PRINT_MSG("Msg       : " + msg);
 	return ret;
 }
 
-bool Client::write(std::string to, std::string& msg)
+bool Client::write(const std::string to, std::string& msg)
 {
-	bool ret{};
+	bool ret{ false };
 	int sentBytes{};
-	if (m_socket.isTCP())
+	if (m_servers.count(to))
 	{
-		ret = m_socket.sendTcp(msg, sentBytes);
+		Socket& data = m_servers.at(to);
+		if (data.isTCP())
+		{
+			ret = data.sendTcp(msg, sentBytes);
+		}
+		else
+		{
+			sockaddr_storage ss;
+			ret = data.sendDatagram(ss, msg, sentBytes);
+		}
+		PRINT_MSG("Sent bytes : " + std::to_string(ret));
 	}
 	else
 	{
-		ret = m_socket.sendDatagram(m_servers[to]._addr, msg, sentBytes);
+		LOG_ERROR("No such connection : " + to);
 	}
-	PRINT_MSG("Tried sending msg[" + std::to_string(msg.size()) + "]   : " + msg + ", To : " + to);
-	PRINT_MSG("Number of bytes sent : " + std::to_string(sentBytes));
 	return ret;
 }
 
 void Client::print() const
 {
-	std::string msg{ "Client Data :\n" };
-	msg += "\t ID      : " + std::to_string(m_socket.getSocketId()) + "\n";
-	msg += "\t Is IPv4 : " + std::to_string(m_socket.isIPv4()) + "\n";
-	msg += "\t Is TCP  : " + std::to_string(m_socket.isTCP()) + "\n";
-	PRINT_MSG("Client ID : ");
+	PRINT_MSG("Client Data :\n");
+	int i = 1;
+	std::string msg;
+	for (const auto& it : m_servers)
+	{
+		msg = "\tServer ID " + it.first;
+		msg += "\t ID      : " + std::to_string(it.second.getSocketId()) + "\n";
+		msg += "\t Is IPv4 : " + std::to_string(it.second.isIPv4()) + "\n";
+		msg += "\t Is TCP  : " + std::to_string(it.second.isTCP()) + "\n";
+		PRINT_MSG(msg + "\n\n");
+	}
 }
 
-bool Client::initTCP(Socket& socket, const std::string& addr, const std::string& port, int family)
+bool Client::addServer(Socket& socket, std::string& serverName, const std::string& msg)
 {
-	if (socket.isActive())
-	{
-		socket.clear();
-	}
+	PRINT_MSG(msg + serverName + " : " + socket.getIPAddress());
+
+	serverName = std::to_string(socket.getSocketId());
+	m_servers[serverName] = std::move(socket);
+	return true;
+}
+
+bool Client::initTCP(const std::string& addr, const std::string& port, int family, std::string &serverName)
+{
+	nsNW::Socket socket;
 	if (socket.init(addr, port, true, family))
 	{
 		PRINT_MSG("Got socket : " + std::to_string(socket.getSocketId()));
 		if (socket.connect())
 		{
-			PRINT_MSG("Socket connect success.");
+			addServer(socket, serverName, "Got TCP Socket connected to server : ");
 			return true;
 		}
 		PRINT_MSG("Socket connect failed.");
@@ -105,15 +209,12 @@ bool Client::initTCP(Socket& socket, const std::string& addr, const std::string&
 	return false;
 }
 
-bool Client::initUDP(Socket& socket, const std::string& addr, const std::string& port, int family)
+bool Client::initUDP(const std::string& addr, const std::string& port, int family, std::string& serverName)
 {
-	if (socket.isActive())
-	{
-		socket.clear();
-	}
+	nsNW::Socket socket;
 	if (socket.init(addr, port, false, family))
 	{
-		PRINT_MSG("Got socket : " + std::to_string(socket.getSocketId()));
+		addServer(socket, serverName, "Got UDP Socket : ");
 		return true;
 	}
 	PRINT_MSG("Socket creation failed.");

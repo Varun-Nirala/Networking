@@ -138,14 +138,18 @@ public:
 
 GlobalInit __globalInit;
 
-inline std::string whoami();
-inline int getPort(const struct addrinfo* addr);
-inline std::string getIP(const struct addrinfo* addr);
-inline std::string getPortIP(const struct addrinfo* addr);
-inline std::string asString(const struct addrinfo& info);
-inline bool getNameInfo(const struct addrinfo& addr, std::string& hostname, std::string& service);
-inline struct addrinfo* getAddrInfo(const addrinfo& hints, const std::string& address, const std::string& service);
-inline void freeAddress(struct addrinfo *serverPtr);
+class HelperMethods
+{
+public:
+	static inline std::string whoami();
+	static inline int getPort(const struct addrinfo* addr);
+	static inline std::string getIP(const struct addrinfo* addr);
+	static inline std::string getPortIP(const struct addrinfo* addr);
+	static inline std::string asString(const struct addrinfo& info);
+	static inline bool getNameInfo(const struct addrinfo& addr, std::string& hostname, std::string& service);
+	static inline struct addrinfo* getAddrInfo(const addrinfo& hints, const std::string& address, const std::string& service);
+	static inline void freeAddress(struct addrinfo* serverPtr);
+};
 
 class Address
 {
@@ -166,8 +170,8 @@ public:
 	inline bool isTCP() const { return m_pValidAddress->ai_socktype == SOCK_STREAM;}
 	inline bool isIPv4() const { return getFamily() == AF_INET; }
 	inline std::string getHostname() const { return std::string(m_pValidAddress->ai_canonname); }
-	inline int port() const { return getPort(m_pValidAddress); }
-	inline std::string IP() const { return getIP(m_pValidAddress); }
+	inline int port() const { return HelperMethods::getPort(m_pValidAddress); }
+	inline std::string IP() const { return HelperMethods::getIP(m_pValidAddress); }
 
 	inline const struct addrinfo* getNextAddress();
 
@@ -210,7 +214,7 @@ inline const addrinfo* Address::getNextAddress()
 
 void Address::clear()
 {
-	freeAddress(m_pServinfo);
+	HelperMethods::freeAddress(m_pServinfo);
 	if (!m_szIP.empty())
 	{
 		delete m_pValidAddress;
@@ -226,7 +230,7 @@ void Address::print() const
 	for (addrinfo* p = m_pServinfo; p != nullptr; p = p->ai_next)
 	{
 		PRINT_MSG("Address # " + std::to_string(i++));
-		PRINT_MSG(asString(*p));
+		PRINT_MSG(HelperMethods::asString(*p));
 	}
 }
 
@@ -243,11 +247,11 @@ bool Address::init(int family, int type, int flags)
 	hints.ai_addr = nullptr;
 	hints.ai_next = nullptr;
 
-	m_pServinfo = getAddrInfo(hints, m_szIP, m_szService);
+	m_pServinfo = HelperMethods::getAddrInfo(hints, m_szIP, m_szService);
 	return m_pServinfo != nullptr;
 }
 
-inline std::string whoami()
+inline std::string HelperMethods::whoami()
 {
 	const int MAX = 128;
 	char hostname[MAX];
@@ -259,7 +263,7 @@ inline std::string whoami()
 	return std::string(hostname);
 }
 
-inline int getPort(const struct addrinfo* addr)
+inline int HelperMethods::getPort(const struct addrinfo* addr)
 {
 	if (addr->ai_family == AF_INET)
 	{
@@ -268,7 +272,7 @@ inline int getPort(const struct addrinfo* addr)
 	return ntohs(((struct sockaddr_in6*)addr->ai_addr)->sin6_port);
 }
 
-inline std::string getIP(const struct addrinfo* addr)
+inline std::string HelperMethods::getIP(const struct addrinfo* addr)
 {
 	void* ptr{};
 	char ipstr[INET6_ADDRSTRLEN];
@@ -286,12 +290,12 @@ inline std::string getIP(const struct addrinfo* addr)
 	return std::string(ipstr);
 }
 
-inline std::string getPortIP(const struct addrinfo* addr)
+inline std::string HelperMethods::getPortIP(const struct addrinfo* addr)
 {
 	return getIP(addr) + " : " + std::to_string(getPort(addr));
 }
 
-inline bool getNameInfo(const struct addrinfo& addr, std::string& hostname, std::string& service)
+inline bool HelperMethods::getNameInfo(const struct addrinfo& addr, std::string& hostname, std::string& service)
 {
 	char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
 
@@ -307,7 +311,7 @@ inline bool getNameInfo(const struct addrinfo& addr, std::string& hostname, std:
 	return true;
 }
 
-inline struct addrinfo* getAddrInfo(const addrinfo& hints, const std::string& address, const std::string& service)
+inline struct addrinfo* HelperMethods::getAddrInfo(const addrinfo& hints, const std::string& address, const std::string& service)
 {
 	struct addrinfo* servers{};
 	int ret = getaddrinfo(address.empty() ? nullptr : address.c_str(), service.empty() ? nullptr : service.c_str(), &hints, &servers);
@@ -319,13 +323,13 @@ inline struct addrinfo* getAddrInfo(const addrinfo& hints, const std::string& ad
 	return servers;
 }
 
-inline void freeAddress(struct addrinfo* serverPtr)
+inline void HelperMethods::freeAddress(struct addrinfo* serverPtr)
 {
 	freeaddrinfo(serverPtr);
 	serverPtr = nullptr;
 }
 
-inline std::string asString(const struct addrinfo &info)
+inline std::string HelperMethods::asString(const struct addrinfo &info)
 {
 	std::ostringstream os;
 	os << "\nFlags                : 0x" << std::hex << info.ai_flags << std::dec;

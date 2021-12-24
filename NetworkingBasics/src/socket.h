@@ -72,29 +72,6 @@ struct in6_addr
     }                                       \
   } while (0);
 
-
-struct HostInfo
-{
-	std::string					m_ip;
-	std::string					m_hostname;
-	std::vector<std::string>	m_aliasList;
-	std::vector<struct in_addr> m_addrList;
-	std::vector<std::string>	m_addrListString;
-
-	inline bool empty() const
-	{
-		return m_hostname.empty();
-	}
-
-	inline void clear()
-	{
-		m_ip.clear();
-		m_hostname.clear();
-		m_aliasList.clear();
-		m_addrListString.clear();
-	}
-};
-
 #if defined(PLATFORM_WIN)
 	using SOCKET_TYPE = SOCKET;
 #elif defined(PLATFORM_UNIX)
@@ -105,13 +82,19 @@ struct HostInfo
 struct CommData
 {
 	sockaddr_storage		_addr;
-	SOCKET_TYPE				_sId;
+	SOCKET_TYPE				_sId{ INVALID_SOCKET };
 
 	CommData()
 	{
 		std::memset(&_addr, 0, sizeof(sockaddr_storage));
-		_sId = INVALID_SOCKET;
 	}
+
+	inline std::string getIP() const { return HelperMethods::getIP((struct addrinfo*)&(_addr)); }
+	inline int getPort() const { return HelperMethods::getPort((struct addrinfo*)&(_addr));}
+	inline int getFamily() const { return ((struct addrinfo*)&(_addr))->ai_family; }
+	inline std::string getHostname() const { return ((struct addrinfo*)&(_addr))->ai_canonname; }
+	inline bool isTCP() const { return ((struct addrinfo*)&(_addr))->ai_socktype == SOCK_STREAM; }
+	inline bool isIPv4() const { return ((struct addrinfo*)&(_addr))->ai_family == AF_INET; }
 };
 
 class Socket
@@ -130,6 +113,9 @@ public:
 
 	inline void setBacklog(int val) { m_backlog = val; }
 
+	inline const Address& getAddress() const { return m_address; }
+	inline Address& getAddress() { return m_address; }
+
 	inline SOCKET_TYPE getSocketId() const { return m_socketFd; }
 	inline bool isActive() const { return !(m_socketFd == INVALID_SOCKET); }
 
@@ -147,14 +133,14 @@ public:
 
 	void clear();
 
-	bool sendTcp(SOCKET_TYPE useSocket, const std::string& msg, int& sentBytes);
+	bool sendTcp(const SOCKET_TYPE useSocket, const std::string& msg, int& sentBytes);
 	bool sendTcp(const std::string& msg, int& sentBytes);
 
-	bool recvTcp(SOCKET_TYPE useSocket, const std::string& msg, const int maxSize);
+	bool recvTcp(const SOCKET_TYPE useSocket, const std::string& msg, const int maxSize);
 	bool recvTcp(const std::string& msg, const int maxSize);
 
-	bool sendDatagram(SOCKET_TYPE useSocket, struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes);
-	bool sendDatagram(struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes);
+	bool sendDatagram(const SOCKET_TYPE useSocket, const struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes);
+	bool sendDatagram(const struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes);
 
 	bool recvDatagram(SOCKET_TYPE useSocket, struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize);
 	bool recvDatagram(struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize);
@@ -163,7 +149,7 @@ protected:
 	bool close();
 	bool init();
 	bool getValidSocket();
-	bool setSocketOptions(bool reuseAddr, bool reusePort);
+	bool setSocketOptions(const bool reuseAddr, const bool reusePort);
 
 	struct Buffer
 	{
@@ -254,7 +240,7 @@ bool Socket::accept(struct sockaddr_storage& theirAddr, SOCKET_TYPE& sId)
 		return sId;
 	}
 	PRINT_MSG("Connection accepted. Their socket ID : " + std::to_string(sId));
-	return sId;
+	return true;
 }
 
 bool Socket::connect()
@@ -305,7 +291,7 @@ bool Socket::sendTcp(const std::string& msg, int& sentBytes)
 	return sendTcp(m_socketFd, msg, sentBytes);
 }
 
-bool Socket::recvTcp(SOCKET_TYPE useSocket, const std::string& msg, const int maxSize)
+bool Socket::recvTcp(const SOCKET_TYPE useSocket, const std::string& msg, const int maxSize)
 {
 	if (m_buffer.empty() || m_buffer.size() < maxSize)
 	{
@@ -332,9 +318,9 @@ bool Socket::recvTcp(const std::string& msg, const int maxSize)
 	return recvTcp(m_socketFd, msg, maxSize);
 }
 
-bool Socket::sendDatagram(SOCKET_TYPE useSocket, struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes)
+bool Socket::sendDatagram(const SOCKET_TYPE useSocket, const struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes)
 {
-	sentBytes = ::sendto(useSocket, msg.c_str(), msg.size(), 0, m_address.getaddress()->ai_addr, m_address.getaddress()->ai_addrlen);
+	sentBytes = ::sendto(useSocket, msg.c_str(), msg.size(), 0, (struct sockaddr*)&theirAddr, sizeof(theirAddr));
 	if (sentBytes == -1)
 	{
 		LOG_ERROR("Send error. Error code : " + std::to_string(getErrorCode()));
@@ -349,12 +335,12 @@ bool Socket::sendDatagram(SOCKET_TYPE useSocket, struct sockaddr_storage& theirA
 	return true;
 }
 
-bool Socket::sendDatagram(struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes)
+bool Socket::sendDatagram(const struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes)
 {
 	return sendDatagram(m_socketFd, theirAddr, msg, sentBytes);
 }
 
-bool Socket::recvDatagram(SOCKET_TYPE useSocket, struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize)
+bool Socket::recvDatagram(const SOCKET_TYPE useSocket, struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize)
 {
 	if (m_buffer.empty() || m_buffer.size() < maxSize)
 	{
@@ -371,7 +357,7 @@ bool Socket::recvDatagram(SOCKET_TYPE useSocket, struct sockaddr_storage& theirA
 		return false;
 	}
 	m_buffer[recvBytes] = '\0';
-	std::string ip = getIP((struct addrinfo*)&theirAddr);
+	std::string ip = HelperMethods::getIP((struct addrinfo*)&theirAddr);
 	PRINT_MSG("Got packet from : " + ip);
 	PRINT_MSG("Packet length   : " + std::to_string(recvBytes));
 	PRINT_MSG("Packet          : " + std::string(m_buffer.get()));
@@ -400,7 +386,7 @@ bool Socket::getValidSocket()
 	const struct addrinfo* p = m_address.getNextAddress();
 	while (p)
 	{
-		m_socketFd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+		m_socketFd = ::socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 		if (m_socketFd != -1)
 		{
 			break;
@@ -416,7 +402,7 @@ bool Socket::getValidSocket()
 	return true;
 }
 
-bool Socket::setSocketOptions(bool reuseAddr, bool reusePort)
+bool Socket::setSocketOptions(const bool reuseAddr, const bool reusePort)
 {
 	IF_NOTACTIVE_RETURN(false);
 
