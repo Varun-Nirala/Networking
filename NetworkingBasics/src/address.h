@@ -105,49 +105,63 @@ struct hostent {
 #if defined(PLATFORM_WIN)
 	inline bool onetimeSetup()
 	{
-		static bool bInitialized = false;
-		if (!bInitialized)
+		WSADATA wsa;
+		PRINT_MSG("One time initialisation of Winsock...");
+		if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
 		{
-			WSADATA wsa;
-			PRINT_MSG("One time initialisation of Winsock...");
-			if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
-			{
-				PRINT_MSG("Failed in initialisation of Winsock. Error Code : " + std::to_string(WSAGetLastError()));
-				return false;
-			}
-			bInitialized = true;
+			PRINT_MSG("Failed in initialisation of Winsock. Error Code : " + std::to_string(WSAGetLastError()));
+			return false;
 		}
 		return true;
 	}
 	inline int getErrorCode() { return WSAGetLastError(); }
+	inline void callAtExit() { WSACleanup(); }
 #endif
 #if defined(PLATFORM_UNIX)
 	inline bool onetimeSetup() { return true; }
 	inline int getErrorCode() { return errno; }
+	inline void callAtExit() { ; }
 #endif
 
-inline std::string asString(const struct addrinfo& info);
-inline std::string getIP(const struct addrinfo* addr);
+class GlobalInit
+{
+public:
+	GlobalInit()
+	{
+		onetimeSetup();
+	}
+	~GlobalInit()
+	{
+		callAtExit();
+	}
+};
+
+GlobalInit __globalInit;
+
+inline std::string whoami();
 inline int getPort(const struct addrinfo* addr);
+inline std::string getIP(const struct addrinfo* addr);
 inline std::string getPortIP(const struct addrinfo* addr);
+inline std::string asString(const struct addrinfo& info);
+inline bool getNameInfo(const struct addrinfo& addr, std::string& hostname, std::string& service);
+inline struct addrinfo* getAddrInfo(const addrinfo& hints, const std::string& address, const std::string& service);
+inline void freeAddress(struct addrinfo *serverPtr);
 
 class Address
 {
 public:
 	Address() = default;
 	~Address() { clear(); }
-	
-	explicit Address(const std::string &pAddr, const std::string &pService, bool tcp, int family = AF_UNSPEC);
 
 	bool init(const std::string &pAddr, const std::string &pService, bool tcp, int family);
 	bool init(const std::string &pAddr, const std::string &pService, bool tcp);
-
+	
 	inline bool empty() const { return m_pServinfo == nullptr && !m_pValidAddress; }
 
 	inline std::string getService() const { return m_szService; }
 
-	inline const struct addrinfo* getAddrinfo() const { return m_pValidAddress; }
-	inline struct addrinfo* getAddrinfo() { return m_pValidAddress; }
+	inline const struct addrinfo* getaddress() const { return m_pValidAddress; }
+	inline struct addrinfo* getaddress() { return m_pValidAddress; }
 	inline int getFamily() const { return m_pValidAddress->ai_family; }
 	inline bool isTCP() const { return m_pValidAddress->ai_socktype == SOCK_STREAM;}
 	inline bool isIPv4() const { return getFamily() == AF_INET; }
@@ -156,26 +170,18 @@ public:
 	inline std::string IP() const { return getIP(m_pValidAddress); }
 
 	inline const struct addrinfo* getNextAddress();
+
 	inline void clear();
 	inline void print() const;
 	
 private:
-	
 	inline bool init(int family, int type, int flags);
-	inline bool fillAddressInfo(const char* pAddr, const char* pService, struct addrinfo &hints);
 private:
 	std::string							m_szIP;			// e.g "www.example.com" or IP
 	std::string							m_szService;	// e.g. "http" or port number
 	struct addrinfo						*m_pServinfo{};
 	struct addrinfo						*m_pValidAddress{};
 };
-
-Address::Address(const std::string &pAddr, const std::string &pService, bool tcp, int family)
-	: m_szIP(pAddr)
-	, m_szService(pService)
-{
-	init(family, tcp ? SOCK_STREAM : SOCK_DGRAM, pAddr.empty() ? AI_PASSIVE : 0);
-}
 
 bool Address::init(const std::string &pAddr, const std::string &pService, bool tcp, int family)
 {
@@ -204,7 +210,7 @@ inline const addrinfo* Address::getNextAddress()
 
 void Address::clear()
 {
-	freeaddrinfo(m_pServinfo);
+	freeAddress(m_pServinfo);
 	if (!m_szIP.empty())
 	{
 		delete m_pValidAddress;
@@ -212,9 +218,20 @@ void Address::clear()
 	m_pServinfo = m_pValidAddress = nullptr;
 }
 
+void Address::print() const
+{
+	PRINT_MSG("IP Addresses for " + m_szIP + " , Service : " + m_szService + " :");
+
+	int i = 1;
+	for (addrinfo* p = m_pServinfo; p != nullptr; p = p->ai_next)
+	{
+		PRINT_MSG("Address # " + std::to_string(i++));
+		PRINT_MSG(asString(*p));
+	}
+}
+
 bool Address::init(int family, int type, int flags)
 {
-	onetimeSetup();
 	struct addrinfo hints{};
 	memset(&hints, 0, sizeof(hints));
 
@@ -225,80 +242,21 @@ bool Address::init(int family, int type, int flags)
 	hints.ai_canonname = nullptr;
 	hints.ai_addr = nullptr;
 	hints.ai_next = nullptr;
-	if (!m_szIP.empty())
-	{
-		m_pValidAddress = new addrinfo();
-		memset(m_pValidAddress, 0, sizeof(addrinfo));
-		memcpy(m_pValidAddress, &hints, sizeof(hints));
 
-		int ret = inet_pton(hints.ai_family, m_szIP.c_str(), &(m_pValidAddress->ai_addr));
-		if (ret == 0)
-		{
-			PRINT_MSG("Invalid address in the specified address family. Address : " + m_szIP);
-			// Invalid address in the specified address family
-			return false;
-		}
-		else if (ret == -1)
-		{
-			// Invalid address family
-			PRINT_MSG("Invalid address family. Address : " + m_szIP);
-			return false;
-		}
-		return true;
-
-		/*
-		struct sockaddr_in sa;
-		char str[INET_ADDRSTRLEN];
-		// now get it back and print it
-		inet_ntop(AF_INET, &(sa.sin_addr), str, INET_ADDRSTRLEN);
-
-		printf("%s\n", str); // prints "192.0.2.33"
-		// IPv6 demo of inet_ntop() and inet_pton()
-		// (basically the same except with a bunch of 6s thrown around)
-
-		struct sockaddr_in6 sa;
-		char str[INET6_ADDRSTRLEN];
-		// store this IP address in sa:
-		inet_pton(AF_INET6, "2001:db8:8714:3a90::12", &(sa.sin6_addr));
-
-		// now get it back and print it
-		inet_ntop(AF_INET6, &(sa.sin6_addr), str, INET6_ADDRSTRLEN);
-
-		printf("%s\n", str); // prints "2001:db8:8714:3a90::12"
-		*/
-	}
-	const char* paddr = m_szIP.empty() ? nullptr : m_szIP.c_str();
-	const char* pservice = m_szService.empty() ? nullptr : m_szService.c_str();
-
-	return fillAddressInfo(paddr, pservice, hints);
+	m_pServinfo = getAddrInfo(hints, m_szIP, m_szService);
+	return m_pServinfo != nullptr;
 }
 
-bool Address::fillAddressInfo(const char* pAdd, const char* pService, struct addrinfo &hints)
+inline std::string whoami()
 {
-	if (m_pServinfo)
+	const int MAX = 128;
+	char hostname[MAX];
+	if (gethostname(hostname, MAX) == -1)
 	{
-		freeaddrinfo(m_pServinfo);	// Free the Link List
-		m_pServinfo = nullptr;
+		LOG_ERROR("gethostname unsuccessful.");
+		return {};
 	}
-	int ret = getaddrinfo(pAdd, pService, &hints, &m_pServinfo);
-	if (ret != 0)
-	{
-		LOG_ERROR("getaddrinfo: " + std::string(gai_strerror(ret)));
-		return false;
-	}
-	return true;
-}
-
-void Address::print() const
-{
-	PRINT_MSG("IP Addresses for " + m_szIP + " , Service : " + m_szService + " :");
-
-	int i = 1;
-	for (addrinfo *p = m_pServinfo; p != nullptr; p = p->ai_next)
-	{
-		PRINT_MSG("Address # " + std::to_string(i++));
-		PRINT_MSG(asString(*p));
-	}
+	return std::string(hostname);
 }
 
 inline int getPort(const struct addrinfo* addr)
@@ -331,6 +289,40 @@ inline std::string getIP(const struct addrinfo* addr)
 inline std::string getPortIP(const struct addrinfo* addr)
 {
 	return getIP(addr) + " : " + std::to_string(getPort(addr));
+}
+
+inline bool getNameInfo(const struct addrinfo& addr, std::string& hostname, std::string& service)
+{
+	char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
+
+	int ret = getnameinfo((addr.ai_addr), sizeof(addr), hbuf, NI_MAXHOST, sbuf, NI_MAXSERV, NI_NUMERICHOST | NI_NUMERICSERV);
+	if (ret == 0)
+	{
+		LOG_ERROR("getnameinfo: " + std::string(gai_strerror(ret)));
+		return false;
+	}
+	hostname = std::string(hbuf);
+	service = std::string(sbuf);
+	LOG_ERROR("Hostname : " + hostname + " , Service : " + service);
+	return true;
+}
+
+inline struct addrinfo* getAddrInfo(const addrinfo& hints, const std::string& address, const std::string& service)
+{
+	struct addrinfo* servers{};
+	int ret = getaddrinfo(address.empty() ? nullptr : address.c_str(), service.empty() ? nullptr : service.c_str(), &hints, &servers);
+	if (ret != 0)
+	{
+		LOG_ERROR("getaddrinfo: " + std::string(gai_strerror(ret)));
+		return nullptr;
+	}
+	return servers;
+}
+
+inline void freeAddress(struct addrinfo* serverPtr)
+{
+	freeaddrinfo(serverPtr);
+	serverPtr = nullptr;
 }
 
 inline std::string asString(const struct addrinfo &info)
@@ -391,6 +383,9 @@ inline std::string asString(const struct addrinfo &info)
 			break;
 		case IPPROTO_UDP:
 			os << "IP UDP.";
+			break;
+		case IPPROTO_SCTP:
+			os << "SCTP.";
 			break;
 		default:
 			os << "Other : " << info.ai_protocol;

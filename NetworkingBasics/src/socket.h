@@ -123,16 +123,10 @@ public:
 	Socket(const Socket& sock) = delete;
 	Socket& operator=(const Socket& sock) = delete;
 
-	explicit Socket(const std::string& pAddr, const std::string& pService, bool tcp, int family = AF_UNSPEC)
-		: m_address(pAddr, pService, tcp, family)
-	{
-		init();
-	}
-
 	Socket(Socket&& sock) = default;
 	Socket& operator=(Socket && sock) = default;
 
-	inline bool init(const std::string& pAddr, const std::string& pService, bool tcp, int family = AF_UNSPEC);
+	inline bool init(const std::string& pAddr, const std::string& pService, bool tcp, int family);
 
 	inline void setBacklog(int val) { m_backlog = val; }
 
@@ -200,7 +194,6 @@ bool Socket::close()
 
 #if defined(PLATFORM_WIN)
 	ret = closesocket(m_socketFd);
-	WSACleanup();
 #else
 	ret = ::close(m_socketFd);
 #endif
@@ -226,7 +219,7 @@ bool Socket::init(const std::string& pAddr, const std::string& pService, bool tc
 bool Socket::bind()
 {
 	IF_NOTACTIVE_RETURN(false);
-	if (::bind(m_socketFd, m_address.getAddrinfo()->ai_addr, m_address.getAddrinfo()->ai_addrlen) == -1)
+	if (::bind(m_socketFd, m_address.getaddress()->ai_addr, m_address.getaddress()->ai_addrlen) == -1)
 	{
 		LOG_ERROR("Socket bind error. Error code : " + std::to_string(getErrorCode()));
 		return false;
@@ -268,7 +261,7 @@ bool Socket::connect()
 {
 	IF_NOTACTIVE_RETURN(false);
 
-	if (::connect(m_socketFd, m_address.getAddrinfo()->ai_addr, m_address.getAddrinfo()->ai_addrlen) == -1)
+	if (::connect(m_socketFd, m_address.getaddress()->ai_addr, m_address.getaddress()->ai_addrlen) == -1)
 	{
 		LOG_ERROR("Socket connect error. Error code : " + std::to_string(getErrorCode()));
 		return false;
@@ -341,7 +334,7 @@ bool Socket::recvTcp(const std::string& msg, const int maxSize)
 
 bool Socket::sendDatagram(SOCKET_TYPE useSocket, struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes)
 {
-	sentBytes = ::sendto(useSocket, msg.c_str(), msg.size(), 0, m_address.getAddrinfo()->ai_addr, m_address.getAddrinfo()->ai_addrlen);
+	sentBytes = ::sendto(useSocket, msg.c_str(), msg.size(), 0, m_address.getaddress()->ai_addr, m_address.getaddress()->ai_addrlen);
 	if (sentBytes == -1)
 	{
 		LOG_ERROR("Send error. Error code : " + std::to_string(getErrorCode()));
