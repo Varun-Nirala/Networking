@@ -8,8 +8,8 @@ int main(int argc, char *argv[])
 {
 	nsTestCase::TestSocket testSocket;
 
-
-	testSocket.runAll_Test();
+	testSocket.runTCP_Test();
+	//StestSocket.runAll_Test();
 
 	return 0;
 }

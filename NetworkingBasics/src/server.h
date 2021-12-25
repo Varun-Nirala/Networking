@@ -179,7 +179,7 @@ bool Server::initUDP(Socket& socket, const std::string& addr, const std::string&
 	m_socket.setBacklog(m_backLog);
 	if (m_socket.init(addr, port, false, family))
 	{
-		Logger::LOG_MSG("Got socket : ", m_socket.getSocketId());
+		Logger::LOG_MSG("Got socket : ", m_socket.getSocketId(), '\n');
 		if (m_socket.bind())
 		{
 			Logger::LOG_MSG("Socket bind success.\n");

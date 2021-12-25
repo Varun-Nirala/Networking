@@ -62,7 +62,7 @@ void TestSocket::runBasic_Test()
 
 void TestSocket::runTCP_Test()
 {
-	Logger::LOG_INFO("Running Tcp test :");
+	Logger::LOG_INFO("Running Tcp test(runTCP_Test).\n\n\n");
 
 	std::vector<std::string> serverMsgList;
 	serverMsgList.emplace_back("Tcp Server Msg 1.");
@@ -85,7 +85,7 @@ void TestSocket::runTCP_Test()
 
 	std::for_each(threads.begin(), threads.end(), std::mem_fn(&std::thread::join));
 
-	Logger::LOG_MSG("\n\n\n");
+	Logger::LOG_INFO("Tcp test(runTCP_Test). Ended\n\n\n");
 }
 
 void TestSocket::runUDP_Test()
@@ -99,7 +99,7 @@ void TestSocket::runTCP_Server(std::vector<std::string> &msgList)
 	bool tcpConnection = true;
 	std::string serverPort{ "8080" };
 	nsNW::Server server;
-	Logger::LOG_MSG("Running TCP server on thread ", std::this_thread::get_id(), "] : On Port : ", serverPort);
+	Logger::LOG_MSG("Running TCP server on thread :", std::this_thread::get_id(), ", On Port :", serverPort, '\n');
 
 	std::unordered_map<std::string, std::vector<std::string>> clientData;
 
@@ -127,9 +127,13 @@ void TestSocket::runTCP_Server(std::vector<std::string> &msgList)
 
 void TestSocket::runTCP_Client(std::vector<std::string>& msgList)
 {
+	using namespace std::chrono_literals;
+	std::this_thread::sleep_for(20ms);
 	bool tcpConnection = true;
 	std::string serverPort{ "8080" };
 	nsNW::Client client;
+
+	Logger::LOG_MSG("Running TCP client on thread :", std::this_thread::get_id(), ", Connecting to server on Port :", serverPort, '\n');
 
 	std::unordered_map<std::string, std::vector<std::string>> serverData;
 

@@ -368,7 +368,7 @@ bool Socket::recvDatagram(struct sockaddr_storage& theirAddr, const std::string&
 
 bool Socket::init()
 {
-	if (!onetimeSetup() || !getValidSocket() || !setSocketOptions(true, true))
+	if (!getValidSocket() || !setSocketOptions(true, true))
 	{
 		Logger::LOG_ERROR("Socket setup error.\n");
 		return false;

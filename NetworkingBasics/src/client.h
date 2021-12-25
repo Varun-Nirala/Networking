@@ -197,7 +197,7 @@ bool Client::initTCP(const std::string& addr, const std::string& port, int famil
 	nsNW::Socket socket;
 	if (socket.init(addr, port, true, family))
 	{
-		Logger::LOG_MSG("Got socket : ", socket.getSocketId());
+		Logger::LOG_MSG("Got socket : ", socket.getSocketId(), '\n');
 		if (socket.connect())
 		{
 			addServer(socket, serverName, "Got TCP Socket connected to server :");
