@@ -3,9 +3,12 @@
 
 #include <iostream>
 #include <vector>
+#include <algorithm>
+#include <functional>
 #include <unordered_map>
 #include <thread>
 
+#include "helper.h"
 #include "socket.h"
 #include "server.h"
 #include "client.h"
@@ -13,6 +16,7 @@
 
 namespace nsTestCase
 {
+using nsNW::Logger;
 class TestSocket
 {
 public:
@@ -40,7 +44,7 @@ void TestSocket::runAll_Test()
 
 void TestSocket::runBasic_Test()
 {
-	std::cout << "Running basic test :\n";
+	Logger::LOG_INFO("Running basic test :");
 	bool ipv4 = true;
 
 	nsNW::Address addr;
@@ -58,7 +62,7 @@ void TestSocket::runBasic_Test()
 
 void TestSocket::runTCP_Test()
 {
-	std::cout << "Running Tcp test :\n";
+	Logger::LOG_INFO("Running Tcp test :");
 
 	std::vector<std::string> serverMsgList;
 	serverMsgList.emplace_back("Tcp Server Msg 1.");
@@ -67,23 +71,27 @@ void TestSocket::runTCP_Test()
 	serverMsgList.emplace_back("Tcp Server Msg 4.");
 	serverMsgList.emplace_back("Tcp Server Msg 5.");
 
-	runTCP_Server(serverMsgList);
-
 	std::vector<std::string> clientMsgList;
 	clientMsgList.emplace_back("Tcp Client Msg 1.");
 	clientMsgList.emplace_back("Tcp Client Msg 2.");
 	clientMsgList.emplace_back("Tcp Client Msg 3.");
 	clientMsgList.emplace_back("Tcp Client Msg 4.");
 	clientMsgList.emplace_back("Tcp Client Msg 5.");
-	runTCP_Client(clientMsgList);
 
-	std::cout << "\n\n\n";
+	std::vector<std::thread> threads;
+
+	threads.emplace_back(std::thread(&TestSocket::runTCP_Server, this, serverMsgList));
+	threads.emplace_back(std::thread(&TestSocket::runTCP_Client, this, clientMsgList));
+
+	std::for_each(threads.begin(), threads.end(), std::mem_fn(&std::thread::join));
+
+	Logger::LOG_MSG("\n\n\n");
 }
 
 void TestSocket::runUDP_Test()
 {
-	std::cout << "Running Udp test :\n";
-	std::cout << "\n\n\n";
+	Logger::LOG_INFO("Running Udp test :");
+	Logger::LOG_MSG("\n\n\n");
 }
 
 void TestSocket::runTCP_Server(std::vector<std::string> &msgList)
@@ -91,6 +99,7 @@ void TestSocket::runTCP_Server(std::vector<std::string> &msgList)
 	bool tcpConnection = true;
 	std::string serverPort{ "8080" };
 	nsNW::Server server;
+	Logger::LOG_MSG("Running TCP server on thread ", std::this_thread::get_id(), "] : On Port : ", serverPort);
 
 	std::unordered_map<std::string, std::vector<std::string>> clientData;
 
@@ -105,7 +114,9 @@ void TestSocket::runTCP_Server(std::vector<std::string> &msgList)
 			{
 				std::string clientMsg;
 				server.read(clientName, clientMsg);
-				PRINT_MSG(clientName + " : " + clientMsg);
+
+				Logger::LOG_MSG(clientName, " : ", clientMsg);
+
 				clientData[clientName].push_back(clientMsg);
 				server.write(clientName, msgList[i++]);
 				keepGoing = (i <= msgList.size());
@@ -132,7 +143,9 @@ void TestSocket::runTCP_Client(std::vector<std::string>& msgList)
 			std::string serverMsg;
 			client.write(serverName, msgList[i++]);
 			client.read(serverName, serverMsg);
-			PRINT_MSG(serverName + " : " + serverMsg);
+
+			Logger::LOG_MSG(serverName, " : ", serverMsg);
+
 			keepGoing = (i <= msgList.size());
 		}
 	}

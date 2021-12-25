@@ -54,7 +54,7 @@ SOCKET_TYPE Client::getSocketId(const std::string serverName) const
 	{
 		return m_servers.at(serverName).getSocketId();
 	}
-	PRINT_MSG("No such server. Server : " + serverName);
+	Logger::LOG_INFO("No such server. Server :", serverName, '\n');
 	return INVALID_SOCKET;
 }
 
@@ -64,7 +64,7 @@ std::string Client::getIPAddress(const std::string serverName) const
 	{
 		return m_servers.at(serverName).getIPAddress();
 	}
-	PRINT_MSG("No such server. Server : " + serverName);
+	Logger::LOG_INFO("No such server. Server :", serverName, '\n');
 	return "";
 }
 
@@ -74,7 +74,7 @@ int Client::getPort(const std::string serverName) const
 	{
 		return m_servers.at(serverName).getPort();
 	}
-	PRINT_MSG("No such server. Server : " + serverName);
+	Logger::LOG_INFO("No such server. Server :", serverName, '\n');
 	return 0;
 }
 
@@ -84,7 +84,7 @@ int Client::getFamily(const std::string serverName) const
 	{
 		return m_servers.at(serverName).getFamily();
 	}
-	PRINT_MSG("No such server. Server : " + serverName);
+	Logger::LOG_INFO("No such server. Server :", serverName, '\n');
 	return -1;
 }
 
@@ -94,7 +94,7 @@ std::string Client::getHostname(const std::string serverName) const
 	{
 		return m_servers.at(serverName).getHostname();
 	}
-	PRINT_MSG("No such server. Server : " + serverName);
+	Logger::LOG_INFO("No such server. Server :", serverName, '\n');
 	return "";
 }
 
@@ -104,7 +104,7 @@ bool Client::isTCP(const std::string serverName) const
 	{
 		return m_servers.at(serverName).isTCP();
 	}
-	PRINT_MSG("No such server. Server : " + serverName);
+	Logger::LOG_INFO("No such server. Server : ", serverName, '\n');
 	return false;
 }
 
@@ -114,7 +114,7 @@ bool Client::isIPv4(const std::string serverName) const
 	{
 		return m_servers.at(serverName).isIPv4();
 	}
-	PRINT_MSG("No such server. Server : " + serverName);
+	Logger::LOG_INFO("No such server. Server : ", serverName, '\n');
 	return false;
 }
 
@@ -134,11 +134,11 @@ bool Client::read(const std::string from, std::string& msg, const int maxSize)
 			sockaddr_storage ss;
 			ret = data.recvDatagram(ss, msg, maxSize);
 		}
-		PRINT_MSG("Recieved : " + msg);
+		Logger::LOG_MSG("Recieved :", msg, '\n');
 	}
 	else
 	{
-		LOG_ERROR("No such connection : " + from);
+		Logger::LOG_ERROR("No such connection :", from, '\n');
 	}
 	return ret;
 }
@@ -159,18 +159,18 @@ bool Client::write(const std::string to, std::string& msg)
 			sockaddr_storage ss;
 			ret = data.sendDatagram(ss, msg, sentBytes);
 		}
-		PRINT_MSG("Sent bytes : " + std::to_string(ret));
+		Logger::LOG_MSG("Sent bytes :", ret, '\n');
 	}
 	else
 	{
-		LOG_ERROR("No such connection : " + to);
+		Logger::LOG_ERROR("No such connection :", to, '\n');
 	}
 	return ret;
 }
 
 void Client::print() const
 {
-	PRINT_MSG("Client Data :\n");
+	Logger::LOG_MSG("Client Data :");
 	int i = 1;
 	std::string msg;
 	for (const auto& it : m_servers)
@@ -179,13 +179,13 @@ void Client::print() const
 		msg += "\t ID      : " + std::to_string(it.second.getSocketId()) + "\n";
 		msg += "\t Is IPv4 : " + std::to_string(it.second.isIPv4()) + "\n";
 		msg += "\t Is TCP  : " + std::to_string(it.second.isTCP()) + "\n";
-		PRINT_MSG(msg + "\n\n");
+		Logger::LOG_MSG(msg);
 	}
 }
 
 bool Client::addServer(Socket& socket, std::string& serverName, const std::string& msg)
 {
-	PRINT_MSG(msg + serverName + " : " + socket.getIPAddress());
+	Logger::LOG_MSG(msg, serverName,  socket.getIPAddress());
 
 	serverName = std::to_string(socket.getSocketId());
 	m_servers[serverName] = std::move(socket);
@@ -197,15 +197,15 @@ bool Client::initTCP(const std::string& addr, const std::string& port, int famil
 	nsNW::Socket socket;
 	if (socket.init(addr, port, true, family))
 	{
-		PRINT_MSG("Got socket : " + std::to_string(socket.getSocketId()));
+		Logger::LOG_MSG("Got socket : ", socket.getSocketId());
 		if (socket.connect())
 		{
-			addServer(socket, serverName, "Got TCP Socket connected to server : ");
+			addServer(socket, serverName, "Got TCP Socket connected to server :");
 			return true;
 		}
-		PRINT_MSG("Socket connect failed.");
+		Logger::LOG_ERROR("Socket connect failed.\n");
 	}
-	PRINT_MSG("Socket creation failed.");
+	Logger::LOG_ERROR("Socket creation failed.\n");
 	return false;
 }
 
@@ -214,10 +214,10 @@ bool Client::initUDP(const std::string& addr, const std::string& port, int famil
 	nsNW::Socket socket;
 	if (socket.init(addr, port, false, family))
 	{
-		addServer(socket, serverName, "Got UDP Socket : ");
+		addServer(socket, serverName, "Got UDP Socket :");
 		return true;
 	}
-	PRINT_MSG("Socket creation failed.");
+	Logger::LOG_ERROR("Socket creation failed.\n");
 	return false;
 }
 }

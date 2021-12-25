@@ -9,15 +9,53 @@
 
 namespace nsNW
 {
-#ifdef DEBUG
-    #define LOG_ERROR(msg)  std::cerr << "ERROR :: " << __FUNCTION__ << "::" << __LINE__ << ":: " << msg << '\n'
-    #define LOG_INFO(msg)  std::cerr << "INFO :: " << __FUNCTION__ << "::" << __LINE__ << ":: " << msg << '\n'
-#else
-    #define LOG_ERROR(msg)  std::cerr << "ERROR :: " << __FUNCTION__ << "::" << __LINE__ << ":: " << msg << '\n'
-    #define LOG_INFO(msg)  ;
-#endif
+class Logger
+{
+public:
+    template<typename T>
+    static inline void LOG_INFO(T last) { std::cerr << last ; }
 
-#define PRINT_MSG(msg)  std::cout << msg << '\n'
+    template<typename T>
+    static inline void LOG_ERROR(T last) { std::cerr << last ; }
+
+    template<typename T>
+    static inline void LOG_MSG(T last) { std::cerr << last ; }
+
+    template<typename T, typename ... Args>
+    static inline void LOG_INFO(T first, Args ... args)
+    {
+        std::cerr << first << " ";
+        LOG_INFO(args ...);
+    }
+
+    template<typename T, typename ... Args>
+    static inline void LOG_ERROR(T first, Args ... args)
+    {
+        std::cerr << first << " ";
+        LOG_ERROR(args ...);
+    }
+
+    template<typename ... Args>
+    static inline void LOG_INFO(Args ... args)
+    {
+        std::cerr << "INFO  : ";
+        LOG_INFO(args ...);
+    }
+
+    template<typename ... Args>
+    static inline void LOG_ERROR(Args ... args)
+    {
+        std::cerr << "ERROR : ";
+        LOG_ERROR(args ...);
+    }
+
+    template<typename T, typename ... Args>
+    static inline void LOG_MSG(T first, Args ... args)
+    {
+        std::cerr << first << " ";
+        LOG_MSG(args ...);
+    }
+};
 
 class Timer
 {
@@ -31,7 +69,7 @@ public:
 
     inline void print(std::string msg)
     {
-        PRINT_MSG(msg + std::to_string(getElapsedMS().count()) + " ms.");
+        Logger::LOG_MSG(msg, std::to_string(getElapsedMS().count()), " ms.");
     }
 private:
     std::chrono::high_resolution_clock::time_point     m_start;

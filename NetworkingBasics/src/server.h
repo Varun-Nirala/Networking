@@ -56,19 +56,19 @@ bool Server::startServer(const std::string& addr, const std::string& port, bool 
 
 bool Server::acceptConnection(std::string& clientName)
 {
-	PRINT_MSG("Server is listening for connection...");
+	Logger::LOG_MSG("Server is listening for connection.\n");
 	if (m_socket.listen())
 	{
-		PRINT_MSG("Server got connection request...");
+		Logger::LOG_MSG("Server got connection request.\n");
 		CommData client;
 		if (m_socket.accept(client._addr, client._sId))
 		{
-			addClient(client, clientName, "Server accepted connect request from ");
+			addClient(client, clientName, "Server accepted connect request from");
 			return true;
 		}
-		PRINT_MSG("Server failed to accept connection request.");
+		Logger::LOG_ERROR("Server failed to accept connection request.\n");
 	}
-	PRINT_MSG("Server listen failed.");
+	Logger::LOG_ERROR("Server listen failed.\n");
 	return false;
 }
 
@@ -98,11 +98,11 @@ bool Server::read(const std::string from, std::string& msg, const int maxSize)
 			CommData c;
 			ret = m_socket.recvDatagram(data._sId, c._addr, msg, maxSize);
 		}
-		PRINT_MSG("Recieved : " + msg);
+		Logger::LOG_MSG("Recieved :", msg, '\n');
 	}
 	else
 	{
-		LOG_ERROR("No such connection : " + from);
+		Logger::LOG_ERROR("No such connection :", from, '\n');
 	}
 	return ret;
 }
@@ -123,11 +123,11 @@ bool Server::write(const std::string to, std::string& msg)
 			CommData c;
 			ret = m_socket.sendDatagram(data._sId, c._addr, msg, sentBytes);
 		}
-		PRINT_MSG("Sent bytes : " + std::to_string(ret));
+		Logger::LOG_MSG("Sent bytes :", ret, '\n');
 	}
 	else
 	{
-		LOG_ERROR("No such connection : " + to);
+		Logger::LOG_ERROR("No such connection :", to, '\n');
 	}
 	return ret;
 }
@@ -138,13 +138,13 @@ void Server::print() const
 	msg += "\t ID      : " + std::to_string(m_socket.getSocketId()) + "\n";
 	msg += "\t Is IPv4 : " + std::to_string(m_socket.isIPv4()) + "\n";
 	msg += "\t Is TCP  : " + std::to_string(m_socket.isTCP()) + "\n";
-	PRINT_MSG("Server ID : ");
+	Logger::LOG_MSG(msg);
 }
 
 bool Server::addClient(CommData& commData, std::string& clientName, const std::string &msg)
 {
 	clientName = std::to_string(commData._sId);
-	PRINT_MSG(msg + clientName + " : " + HelperMethods::getIP((addrinfo*)(&commData._addr)));
+	Logger::LOG_MSG(msg, clientName, " : ", HelperMethods::getIP((addrinfo*)(&commData._addr)));
 	m_clients[clientName] = commData;
 	return true;
 }
@@ -158,15 +158,15 @@ bool Server::initTCP(Socket& socket, const std::string& addr, const std::string&
 	m_socket.setBacklog(m_backLog);
 	if (m_socket.init(addr, port, true, family))
 	{
-		PRINT_MSG("Got socket : " + std::to_string(m_socket.getSocketId()));
+		Logger::LOG_MSG("Got socket : ", m_socket.getSocketId(), '\n');
 		if (m_socket.bind())
 		{
-			PRINT_MSG("Socket bind success.");
+			Logger::LOG_MSG("Socket bind success.\n");
 			return true;
 		}
-		PRINT_MSG("Socket bind failed.");
+		Logger::LOG_ERROR("Socket bind failed.\n");
 	}
-	PRINT_MSG("Socket creation failed.");
+	Logger::LOG_ERROR("Socket creation failed.\n");
 	return false;
 }
 
@@ -179,15 +179,15 @@ bool Server::initUDP(Socket& socket, const std::string& addr, const std::string&
 	m_socket.setBacklog(m_backLog);
 	if (m_socket.init(addr, port, false, family))
 	{
-		PRINT_MSG("Got socket : " + std::to_string(m_socket.getSocketId()));
+		Logger::LOG_MSG("Got socket : ", m_socket.getSocketId());
 		if (m_socket.bind())
 		{
-			PRINT_MSG("Socket bind success.");
+			Logger::LOG_MSG("Socket bind success.\n");
 			return true;
 		}
-		PRINT_MSG("Socket bind failed.");
+		Logger::LOG_ERROR("Socket bind failed.\n");
 	}
-	PRINT_MSG("Socket creation failed.");
+	Logger::LOG_ERROR("Socket creation failed.\n");
 	return false;
 }
 }

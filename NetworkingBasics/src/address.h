@@ -106,12 +106,12 @@ struct hostent {
 	inline bool onetimeSetup()
 	{
 		WSADATA wsa;
-		PRINT_MSG("One time initialisation of Winsock...");
 		if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
 		{
-			PRINT_MSG("Failed in initialisation of Winsock. Error Code : " + std::to_string(WSAGetLastError()));
+			Logger::LOG_ERROR("One tine initialisation of Winsock. : Failed. Error Code :", WSAGetLastError(), '\n');
 			return false;
 		}
+		Logger::LOG_ERROR("One tine initialisation of Winsock. : Success.\n");
 		return true;
 	}
 	inline int getErrorCode() { return WSAGetLastError(); }
@@ -207,7 +207,14 @@ inline const addrinfo* Address::getNextAddress()
 {
 	if (m_pServinfo)
 	{
-		m_pValidAddress = m_pValidAddress->ai_next;
+		if (!m_pValidAddress)
+		{
+			m_pValidAddress = m_pServinfo;
+		}
+		else
+		{
+			m_pValidAddress = m_pValidAddress->ai_next;
+		}
 	}
 	return m_pValidAddress;
 }
@@ -215,22 +222,18 @@ inline const addrinfo* Address::getNextAddress()
 void Address::clear()
 {
 	HelperMethods::freeAddress(m_pServinfo);
-	if (!m_szIP.empty())
-	{
-		delete m_pValidAddress;
-	}
 	m_pServinfo = m_pValidAddress = nullptr;
 }
 
 void Address::print() const
 {
-	PRINT_MSG("IP Addresses for " + m_szIP + " , Service : " + m_szService + " :");
+	Logger::LOG_MSG("IP Addresses :", m_szIP, "Service :", m_szService, '\n');
 
 	int i = 1;
 	for (addrinfo* p = m_pServinfo; p != nullptr; p = p->ai_next)
 	{
-		PRINT_MSG("Address # " + std::to_string(i++));
-		PRINT_MSG(HelperMethods::asString(*p));
+		Logger::LOG_MSG("    Address ", i++);
+		Logger::LOG_MSG(HelperMethods::asString(*p) + '\n');
 	}
 }
 
@@ -255,9 +258,10 @@ inline std::string HelperMethods::whoami()
 {
 	const int MAX = 128;
 	char hostname[MAX];
-	if (gethostname(hostname, MAX) == -1)
+	int ret = ::gethostname(hostname, MAX);
+	if (ret == -1)
 	{
-		LOG_ERROR("gethostname unsuccessful.");
+		Logger::LOG_ERROR("gethostname API unsuccessful. Error Code", getErrorCode(), '\n');
 		return {};
 	}
 	return std::string(hostname);
@@ -299,25 +303,25 @@ inline bool HelperMethods::getNameInfo(const struct addrinfo& addr, std::string&
 {
 	char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
 
-	int ret = getnameinfo((addr.ai_addr), sizeof(addr), hbuf, NI_MAXHOST, sbuf, NI_MAXSERV, NI_NUMERICHOST | NI_NUMERICSERV);
-	if (ret == 0)
+	int ret = ::getnameinfo((addr.ai_addr), sizeof(addr), hbuf, NI_MAXHOST, sbuf, NI_MAXSERV, NI_NUMERICHOST | NI_NUMERICSERV);
+	if (ret != 0)
 	{
-		LOG_ERROR("getnameinfo: " + std::string(gai_strerror(ret)));
+		Logger::LOG_ERROR("getnameinfo API unsuccessful.", gai_strerror(ret), '\n');
 		return false;
 	}
 	hostname = std::string(hbuf);
 	service = std::string(sbuf);
-	LOG_ERROR("Hostname : " + hostname + " , Service : " + service);
+	Logger::LOG_ERROR("Hostname :", hostname, "Service :", service);
 	return true;
 }
 
 inline struct addrinfo* HelperMethods::getAddrInfo(const addrinfo& hints, const std::string& address, const std::string& service)
 {
 	struct addrinfo* servers{};
-	int ret = getaddrinfo(address.empty() ? nullptr : address.c_str(), service.empty() ? nullptr : service.c_str(), &hints, &servers);
+	int ret = ::getaddrinfo(address.empty() ? nullptr : address.c_str(), service.empty() ? nullptr : service.c_str(), &hints, &servers);
 	if (ret != 0)
 	{
-		LOG_ERROR("getaddrinfo: " + std::string(gai_strerror(ret)));
+		Logger::LOG_ERROR("getaddrinfo API unsuccessful.", gai_strerror(ret), '\n');
 		return nullptr;
 	}
 	return servers;
