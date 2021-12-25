@@ -149,6 +149,9 @@ public:
 	static inline bool getNameInfo(const struct addrinfo& addr, std::string& hostname, std::string& service);
 	static inline struct addrinfo* getAddrInfo(const addrinfo& hints, const std::string& address, const std::string& service);
 	static inline void freeAddress(struct addrinfo* serverPtr);
+	static inline std::string getProtocolAsString(const int protocol);
+	static inline std::string getFamilyAsString(const int family);
+	static inline std::string getSocketTypeAsString(const int sockType);
 };
 
 class Address
@@ -227,7 +230,8 @@ void Address::clear()
 
 void Address::print() const
 {
-	Logger::LOG_MSG("IP Addresses :", m_szIP, "Service :", m_szService, '\n');
+	Logger::LOG_MSG("\nPrinting Socket      :");
+	Logger::LOG_MSG("\nIP Addresses         :", m_szIP, " : Service             :", m_szService, '\n');
 
 	int i = 1;
 	for (addrinfo* p = m_pServinfo; p != nullptr; p = p->ai_next)
@@ -235,6 +239,7 @@ void Address::print() const
 		Logger::LOG_MSG("    Address ", i++);
 		Logger::LOG_MSG(HelperMethods::asString(*p) + '\n');
 	}
+	Logger::LOG_MSG("\n");
 }
 
 bool Address::init(int family, int type, int flags)
@@ -311,7 +316,6 @@ inline bool HelperMethods::getNameInfo(const struct addrinfo& addr, std::string&
 	}
 	hostname = std::string(hbuf);
 	service = std::string(sbuf);
-	Logger::LOG_ERROR("Hostname :", hostname, "Service :", service);
 	return true;
 }
 
@@ -337,73 +341,92 @@ inline std::string HelperMethods::asString(const struct addrinfo &info)
 {
 	std::ostringstream os;
 	os << "\nFlags                : 0x" << std::hex << info.ai_flags << std::dec;
-	os << "\nFamily               : ";
-	switch (info.ai_family)
+	os << "\nFamily               : " << HelperMethods::getFamilyAsString(info.ai_family);
+	os << "\nSocket Type          : " << HelperMethods::getSocketTypeAsString(info.ai_socktype);
+	os << "\nProtocol             : " << HelperMethods::getProtocolAsString(info.ai_protocol);
+	if (info.ai_canonname)
 	{
-		case AF_UNSPEC:
-			os << "Unspecified.";
-			break;
-		case AF_INET:
-			os << "IPv4   : " << getIP(&info);
-			break;
-		case AF_INET6:
-			os << "IPv6   : " << getIP(&info);
-			break;
-		default:
-			os << "Other : " << info.ai_family;
-			break;
+		os << "\nCanonical name       : " << info.ai_canonname;
+	}
+	else
+	{
+		os << "\nCanonical name       : " << "nullptr";
 	}
 	
-	os << "\nSocket               : ";
-	switch (info.ai_socktype)
+	os << "\nSockaddr length      : " << info.ai_addrlen << '\n';
+	return os.str();
+}
+
+inline std::string HelperMethods::getProtocolAsString(const int protocol)
+{
+	switch (protocol)
 	{
 		case 0:
-			os << "Unspecified.";
-			break;
-		case SOCK_STREAM:
-			os << "TCP.";
-			break;
-		case SOCK_DGRAM:
-			os << "UDP.";
-			break;
-		case SOCK_RAW:
-			os << "RAW.";
-			break;
-		case SOCK_RDM:
-			os << "Reliable UDP.";
-			break;
-		case SOCK_SEQPACKET:
-			os << " Pseudo TCP.";
-			break;
-		default:
-			os << "Other : " << info.ai_socktype;
-			break;
-	}
-	
-	os << "\nProtocol             : ";
-	switch (info.ai_protocol)
-	{
-		case 0:
-			os << "Unspecified.";
+			return "Unspecified";
 			break;
 		case IPPROTO_TCP:
-			os << "IP TCP.";
+			return "IPPROTO_TCP";
 			break;
 		case IPPROTO_UDP:
-			os << "IP UDP.";
+			return "IPPROTO_UDP";
 			break;
 		case IPPROTO_SCTP:
-			os << "SCTP.";
+			return "IPPROTO_SCTP";
 			break;
 		default:
-			os << "Other : " << info.ai_protocol;
 			break;
 	}
+	return "Unkown ( " + std::to_string(protocol) + " )";
+}
 
-	os << "\nCanonical name       : " << (info.ai_canonname == nullptr) ? "nullptr" : info.ai_canonname;
-	
-	os << "\nSockaddr length      : " << info.ai_addrlen;
-	return os.str();
+inline std::string HelperMethods::getFamilyAsString(const int family)
+{
+	switch (family)
+	{
+		case AF_UNSPEC:
+			return "Unspecified";
+			break;
+		case AF_INET:
+			return "AF_INET (IPv4)";
+			break;
+		case AF_INET6:
+			return "AF_INET6 (IPv6)";
+			break;
+		case AF_UNIX:
+			return "AF_UNIX (Local host to unix pipes, portals)";
+			break;
+		default:
+			break;
+	}
+	return "Unkown ( " + std::to_string(family) + " )";
+}
+
+inline std::string HelperMethods::getSocketTypeAsString(const int sockType)
+{
+	switch (sockType)
+	{
+		case 0:
+			return "Unspecified";
+			break;
+		case SOCK_STREAM:
+			return "SOCK_STREAM (TCP)";
+			break;
+		case SOCK_DGRAM:
+			return "SOCK_DGRAM (UDP)";
+			break;
+		case SOCK_RAW:
+			return "SOCK_RAW";
+			break;
+		case SOCK_RDM:
+			return "SOCK_RDM (Reliable UDP, Reliably delivered message)";
+			break;
+		case SOCK_SEQPACKET:
+			return "SOCK_SEQPACKET (Pseudo TCP)";
+			break;
+		default:
+			break;
+	}
+	return "Unkown ( " + std::to_string(sockType) + " )";
 }
 }
 

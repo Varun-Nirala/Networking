@@ -95,6 +95,7 @@ struct CommData
 	inline std::string getHostname() const { return ((struct addrinfo*)&(_addr))->ai_canonname; }
 	inline bool isTCP() const { return ((struct addrinfo*)&(_addr))->ai_socktype == SOCK_STREAM; }
 	inline bool isIPv4() const { return ((struct addrinfo*)&(_addr))->ai_family == AF_INET; }
+	inline void print() const;
 };
 
 class Socket
@@ -112,6 +113,7 @@ public:
 	inline bool init(const std::string& pAddr, const std::string& pService, bool tcp, int family);
 
 	inline void setBacklog(int val) { m_backlog = val; }
+	inline int getBacklog() const { return m_backlog; }
 
 	inline const Address& getAddress() const { return m_address; }
 	inline Address& getAddress() { return m_address; }
@@ -144,6 +146,8 @@ public:
 
 	bool recvDatagram(SOCKET_TYPE useSocket, struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize);
 	bool recvDatagram(struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize);
+
+	void print() const;
 
 protected:
 	bool close();
@@ -198,7 +202,10 @@ bool Socket::close()
 bool Socket::init(const std::string& pAddr, const std::string& pService, bool tcp, int family)
 {
 	clear();
-	m_address.init(pAddr, pService, tcp, family);
+	if (!m_address.init(pAddr, pService, tcp, family))
+	{
+		Logger::LOG_ERROR("Socket init failed.\n");
+	}
 	return init();
 }
 
@@ -270,7 +277,6 @@ bool Socket::sendTcp(SOCKET_TYPE useSocket, const std::string& msg, int& sentByt
 		Logger::LOG_MSG("Trying to send empty msg.\n");
 		return false;
 	}
-
 	sentBytes = ::send(useSocket, msg.c_str(), msg.size(), 0);
 	if (sentBytes == -1)
 	{
@@ -282,7 +288,15 @@ bool Socket::sendTcp(SOCKET_TYPE useSocket, const std::string& msg, int& sentByt
 		Logger::LOG_ERROR("Connecton closed by server on socket :", useSocket, '\n');
 		return false;
 	}
-	Logger::LOG_MSG("Sent byte count :", sentBytes, '\n');
+	if (msg.size() > sentBytes)
+	{
+		Logger::LOG_MSG("Tried sending :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.");
+	}
+	else
+	{
+		Logger::LOG_MSG("Whole message sent successfully.\n");
+	}
+	
 	return true;
 }
 
@@ -330,7 +344,14 @@ bool Socket::sendDatagram(const SOCKET_TYPE useSocket, const struct sockaddr_sto
 		Logger::LOG_ERROR("Connecton closed by server on socket :", useSocket, '\n');
 		return false;
 	}
-	Logger::LOG_MSG("Sent byte count :", sentBytes, '\n');
+	if (msg.size() > sentBytes)
+	{
+		Logger::LOG_MSG("Tried sending :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.");
+	}
+	else
+	{
+		Logger::LOG_MSG("Whole message sent successfully.\n");
+	}
 	return true;
 }
 
@@ -373,7 +394,7 @@ bool Socket::init()
 		Logger::LOG_ERROR("Socket setup error.\n");
 		return false;
 	}
-	Logger::LOG_MSG("Socket created : ", m_socketFd, '\n');
+	Logger::LOG_MSG("\nSocket created       : ", m_socketFd, '\n');
 	return true;
 }
 
@@ -395,7 +416,6 @@ bool Socket::getValidSocket()
 		Logger::LOG_ERROR("Socket creation error. Error code :", m_socketFd, '\n');
 		return false;
 	}
-	Logger::LOG_MSG("Socket creation success. Socket ID :", m_socketFd, '\n');
 	return true;
 }
 
@@ -421,8 +441,25 @@ bool Socket::setSocketOptions(const bool reuseAddr, const bool reusePort)
 		Logger::LOG_ERROR("Socket option settting error. Error code :", getErrorCode(), '\n');
 		return false;
 	}
-	Logger::LOG_MSG("Socket option settting success.\n");
+	Logger::LOG_MSG("\nsetsockopt API success.");
 	return true;
+}
+
+void Socket::print() const
+{
+	Logger::LOG_MSG("\nPrinting Socket      :");
+	Logger::LOG_MSG("\nSocket ID            :", m_socketFd);
+	Logger::LOG_MSG("\nBacklog              :", m_backlog);
+	Logger::LOG_MSG("\nPrinting Address     :");
+	m_address.print();
+	Logger::LOG_MSG("\n\n");
+}
+
+
+void CommData::print() const
+{
+	Logger::LOG_MSG("\nSocket ID            :", _sId);
+	Logger::LOG_MSG("\nAddress Data         :", HelperMethods::asString(*(struct addrinfo*)&(_addr)), '\n\n');
 }
 }
 

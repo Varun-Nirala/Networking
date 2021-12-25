@@ -34,7 +34,6 @@ private:
 	inline bool initUDP(const std::string& addr, const std::string& port, int family, std::string& serverName);
 
 private:
-	Socket											m_socket;
 	std::unordered_map<std::string, Socket>			m_servers;
 };
 
@@ -159,7 +158,6 @@ bool Client::write(const std::string to, std::string& msg)
 			sockaddr_storage ss;
 			ret = data.sendDatagram(ss, msg, sentBytes);
 		}
-		Logger::LOG_MSG("Sent bytes :", ret, '\n');
 	}
 	else
 	{
@@ -170,16 +168,14 @@ bool Client::write(const std::string to, std::string& msg)
 
 void Client::print() const
 {
-	Logger::LOG_MSG("Client Data :");
+	Logger::LOG_MSG("\nClient Data          :");
+	Logger::LOG_MSG("\n             Servers :\n");
+	
 	int i = 1;
-	std::string msg;
 	for (const auto& it : m_servers)
 	{
-		msg = "\tServer ID " + it.first;
-		msg += "\t ID      : " + std::to_string(it.second.getSocketId()) + "\n";
-		msg += "\t Is IPv4 : " + std::to_string(it.second.isIPv4()) + "\n";
-		msg += "\t Is TCP  : " + std::to_string(it.second.isTCP()) + "\n";
-		Logger::LOG_MSG(msg);
+		Logger::LOG_MSG("\n             Server #", i++, " . ID :", it.first);
+		it.second.print();
 	}
 }
 
@@ -195,29 +191,22 @@ bool Client::addServer(Socket& socket, std::string& serverName, const std::strin
 bool Client::initTCP(const std::string& addr, const std::string& port, int family, std::string &serverName)
 {
 	nsNW::Socket socket;
-	if (socket.init(addr, port, true, family))
+	if (socket.init(addr, port, true, family) && socket.connect())
 	{
-		Logger::LOG_MSG("Got socket : ", socket.getSocketId(), '\n');
-		if (socket.connect())
-		{
-			addServer(socket, serverName, "Got TCP Socket connected to server :");
-			return true;
-		}
-		Logger::LOG_ERROR("Socket connect failed.\n");
+		addServer(socket, serverName, "Got TCP Socket connected to server :");
+		return true;
 	}
-	Logger::LOG_ERROR("Socket creation failed.\n");
 	return false;
 }
 
 bool Client::initUDP(const std::string& addr, const std::string& port, int family, std::string& serverName)
 {
 	nsNW::Socket socket;
-	if (socket.init(addr, port, false, family))
+	if (socket.init(addr, port, false, family) && socket.connect())
 	{
-		addServer(socket, serverName, "Got UDP Socket :");
+		addServer(socket, serverName, "Got UDP Socket connected to server :");
 		return true;
 	}
-	Logger::LOG_ERROR("Socket creation failed.\n");
 	return false;
 }
 }

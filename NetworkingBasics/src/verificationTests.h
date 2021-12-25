@@ -106,6 +106,7 @@ void TestSocket::runTCP_Server(std::vector<std::string> &msgList)
 	int i = 0;
 	if (server.startServer("", serverPort, true))
 	{
+		server.print();
 		std::string clientName;
 		if (server.acceptConnection(clientName))
 		{
@@ -141,6 +142,7 @@ void TestSocket::runTCP_Client(std::vector<std::string>& msgList)
 	int i = 0;
 	if (client.connectTo("", serverPort, true, serverName))
 	{
+		client.print();
 		bool keepGoing = true;
 		while (keepGoing)
 		{
