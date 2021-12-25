@@ -447,7 +447,7 @@ bool Socket::setSocketOptions(const bool reuseAddr, const bool reusePort)
 
 void Socket::print() const
 {
-	Logger::LOG_MSG("\nPrinting Socket      :");
+	Logger::LOG_MSG("\nSocket               :");
 	Logger::LOG_MSG("\nSocket ID            :", m_socketFd);
 	Logger::LOG_MSG("\nBacklog              :", m_backlog);
 	Logger::LOG_MSG("\nPrinting Address     :");

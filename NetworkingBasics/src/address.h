@@ -230,13 +230,13 @@ void Address::clear()
 
 void Address::print() const
 {
-	Logger::LOG_MSG("\nPrinting Socket      :");
-	Logger::LOG_MSG("\nIP Addresses         :", m_szIP, " : Service             :", m_szService, '\n');
+	Logger::LOG_MSG("\nIP Addresses         :", m_szIP);
+	Logger::LOG_MSG("\nService              :", m_szService);
 
 	int i = 1;
 	for (addrinfo* p = m_pServinfo; p != nullptr; p = p->ai_next)
 	{
-		Logger::LOG_MSG("    Address ", i++);
+		Logger::LOG_MSG("\n\nAddress              : #", i++);
 		Logger::LOG_MSG(HelperMethods::asString(*p) + '\n');
 	}
 	Logger::LOG_MSG("\n");

@@ -135,13 +135,16 @@ void Server::print() const
 {
 	Logger::LOG_MSG("\nServer Data          :");
 	m_socket.print();
-	Logger::LOG_MSG("\n             Clients :\n");
 
-	int i = 1;
-	for (const auto& it : m_clients)
+	if (!m_clients.empty())
 	{
-		Logger::LOG_MSG("\n             Client #", i++, " . ID :", it.first);
-		it.second.print();
+		Logger::LOG_MSG("\n             Clients :\n");
+		int i = 1;
+		for (const auto& it : m_clients)
+		{
+			Logger::LOG_MSG("\n             Client #", i++, " . ID :", it.first);
+			it.second.print();
+		}
 	}
 }
 

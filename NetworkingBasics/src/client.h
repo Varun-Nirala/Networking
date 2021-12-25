@@ -168,14 +168,21 @@ bool Client::write(const std::string to, std::string& msg)
 
 void Client::print() const
 {
-	Logger::LOG_MSG("\nClient Data          :");
-	Logger::LOG_MSG("\n             Servers :\n");
-	
-	int i = 1;
-	for (const auto& it : m_servers)
+	if (!m_servers.empty())
 	{
-		Logger::LOG_MSG("\n             Server #", i++, " . ID :", it.first);
-		it.second.print();
+		Logger::LOG_MSG("\nClient Data          :");
+		Logger::LOG_MSG("\n             Servers :\n");
+
+		int i = 1;
+		for (const auto& it : m_servers)
+		{
+			Logger::LOG_MSG("\n             Server #", i++, " . ID :", it.first);
+			it.second.print();
+		}
+	}
+	else
+	{
+		Logger::LOG_MSG("\nNo active connections.\n");
 	}
 }
 
