@@ -26,7 +26,7 @@ public:
 	bool read(const std::string from, std::string& msg, const int maxSize = 1000);
 	bool write(const std::string to, std::string& msg);
 
-	void print() const;
+	void print(const std::string& prefix = "") const;
 private:
 	bool addServer(Socket& socket, std::string& serverName, const std::string& msg);
 
@@ -133,7 +133,7 @@ bool Client::read(const std::string from, std::string& msg, const int maxSize)
 			sockaddr_storage ss;
 			ret = data.recvDatagram(ss, msg, maxSize);
 		}
-		Logger::LOG_MSG("Recieved :", msg, '\n');
+		Logger::LOG_INFO("Recieved :", msg, '\n');
 	}
 	else
 	{
@@ -166,29 +166,29 @@ bool Client::write(const std::string to, std::string& msg)
 	return ret;
 }
 
-void Client::print() const
+void Client::print(const std::string& prefix) const
 {
 	if (!m_servers.empty())
 	{
-		Logger::LOG_MSG("\nClient Data          :");
-		Logger::LOG_MSG("\n             Servers :\n");
-
+		Logger::LOG_MSG(prefix, "Client Data\n");
 		int i = 1;
 		for (const auto& it : m_servers)
 		{
-			Logger::LOG_MSG("\n             Server #", i++, " . ID :", it.first);
+			Logger::LOG_MSG(prefix, "************** Server #", i++, "**************\n");
+			Logger::LOG_MSG(prefix, it.first, '\n');
 			it.second.print();
+			Logger::LOG_MSG(prefix, "*******************************************\n");
 		}
 	}
 	else
 	{
-		Logger::LOG_MSG("\nNo active connections.\n");
+		Logger::LOG_MSG("No active connections.\n");
 	}
 }
 
 bool Client::addServer(Socket& socket, std::string& serverName, const std::string& msg)
 {
-	Logger::LOG_MSG(msg, serverName,  socket.getIPAddress());
+	Logger::LOG_MSG(msg, serverName, socket.getIPAddress());
 
 	serverName = std::to_string(socket.getSocketId());
 	m_servers[serverName] = std::move(socket);

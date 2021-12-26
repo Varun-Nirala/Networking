@@ -26,6 +26,7 @@ public:
 	inline bool isTCP() const { return m_socket.isTCP(); }
 	inline bool isIPv4() const { return m_socket.isIPv4(); }
 
+	bool startListening() const;
 	bool acceptConnection(std::string& clientName);
 
 	SOCKET_TYPE getClientSocketId(const std::string& clientName) const;
@@ -33,7 +34,7 @@ public:
 	bool read(const std::string from, std::string& msg, const int maxSize = 1000);
 	bool write(const std::string to, std::string& msg);
 
-	void print() const;
+	void print(const std::string& prefix = "") const;
 private:
 	bool addClient(CommData& commData, std::string& clientName, const std::string &msg);
 
@@ -56,18 +57,20 @@ bool Server::startServer(const std::string& addr, const std::string& port, bool 
 	return tcp ? initTCP(m_socket, addr, port, AF_UNSPEC) : initUDP(m_socket, addr, port, AF_UNSPEC);
 }
 
-bool Server::acceptConnection(std::string& clientName)
+bool Server::startListening() const
 {
 	Logger::LOG_MSG("Server is listening for connection.\n");
-	if (m_socket.listen())
+	return m_socket.listen();
+}
+
+bool Server::acceptConnection(std::string& clientName)
+{
+	Logger::LOG_MSG("Server got connection request.\n");
+	CommData client;
+	if (m_socket.accept(client._addr, client._sId))
 	{
-		Logger::LOG_MSG("Server got connection request.\n");
-		CommData client;
-		if (m_socket.accept(client._addr, client._sId))
-		{
-			addClient(client, clientName, "Server accepted connect request from");
-			return true;
-		}
+		addClient(client, clientName, "Server accepted connect request from");
+		return true;
 	}
 	return false;
 }
@@ -98,7 +101,7 @@ bool Server::read(const std::string from, std::string& msg, const int maxSize)
 			CommData c;
 			ret = m_socket.recvDatagram(data._sId, c._addr, msg, maxSize);
 		}
-		Logger::LOG_MSG("Recieved :", msg, '\n');
+		Logger::LOG_INFO("Recieved :", msg, '\n');
 	}
 	else
 	{
@@ -131,19 +134,19 @@ bool Server::write(const std::string to, std::string& msg)
 	return ret;
 }
 
-void Server::print() const
+void Server::print(const std::string& prefix) const
 {
-	Logger::LOG_MSG("\nServer Data          :");
+	Logger::LOG_MSG(prefix, "nServer Data\n");
 	m_socket.print();
-
 	if (!m_clients.empty())
 	{
-		Logger::LOG_MSG("\n             Clients :\n");
 		int i = 1;
 		for (const auto& it : m_clients)
 		{
-			Logger::LOG_MSG("\n             Client #", i++, " . ID :", it.first);
+			Logger::LOG_MSG(prefix, "************** Client #", i++, "**************\n");
+			Logger::LOG_MSG(prefix, it.first, '\n');
 			it.second.print();
+			Logger::LOG_MSG(prefix, "*******************************************\n");
 		}
 	}
 }

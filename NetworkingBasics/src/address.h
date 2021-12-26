@@ -111,7 +111,7 @@ struct hostent {
 			Logger::LOG_ERROR("One tine initialisation of Winsock. : Failed. Error Code :", WSAGetLastError(), '\n');
 			return false;
 		}
-		Logger::LOG_ERROR("One tine initialisation of Winsock. : Success.\n");
+		Logger::LOG_INFO("One tine initialisation of Winsock. : Success.\n");
 		return true;
 	}
 	inline int getErrorCode() { return WSAGetLastError(); }
@@ -148,7 +148,7 @@ public:
 	static inline std::string asString(const struct addrinfo& info);
 	static inline bool getNameInfo(const struct addrinfo& addr, std::string& hostname, std::string& service);
 	static inline struct addrinfo* getAddrInfo(const addrinfo& hints, const std::string& address, const std::string& service);
-	static inline void freeAddress(struct addrinfo* serverPtr);
+	static inline void freeAddress(struct addrinfo* &serverPtr);
 	static inline std::string getProtocolAsString(const int protocol);
 	static inline std::string getFamilyAsString(const int family);
 	static inline std::string getSocketTypeAsString(const int sockType);
@@ -159,6 +159,12 @@ class Address
 public:
 	Address() = default;
 	~Address() { clear(); }
+
+	Address(const Address&) = delete;
+	Address(Address&& other) noexcept;
+
+	Address& operator=(const Address&) = delete;
+	Address& operator=(Address&& other) noexcept;
 
 	bool init(const std::string &pAddr, const std::string &pService, bool tcp, int family);
 	bool init(const std::string &pAddr, const std::string &pService, bool tcp);
@@ -190,6 +196,27 @@ private:
 	struct addrinfo						*m_pValidAddress{};
 };
 
+Address::Address(Address &&other) noexcept
+{
+	m_szIP = std::exchange(other.m_szIP, std::string());
+	m_szService = std::exchange(other.m_szService, std::string());
+	m_pServinfo = std::exchange(other.m_pServinfo, nullptr);
+	m_pValidAddress = std::exchange(other.m_pValidAddress, nullptr);
+}
+
+Address& Address::operator=(Address &&other) noexcept
+{
+	if(this != &other)
+	{
+		clear();
+		m_szIP = std::exchange(other.m_szIP, std::string());
+		m_szService = std::exchange(other.m_szService, std::string());
+		m_pServinfo = std::exchange(other.m_pServinfo, nullptr);
+		m_pValidAddress = std::exchange(other.m_pValidAddress, nullptr);
+	}
+	return *this;
+}
+
 bool Address::init(const std::string &pAddr, const std::string &pService, bool tcp, int family)
 {
 	clear();
@@ -214,7 +241,7 @@ inline const addrinfo* Address::getNextAddress()
 		{
 			m_pValidAddress = m_pServinfo;
 		}
-		else
+		else if (m_pValidAddress)
 		{
 			m_pValidAddress = m_pValidAddress->ai_next;
 		}
@@ -225,21 +252,26 @@ inline const addrinfo* Address::getNextAddress()
 void Address::clear()
 {
 	HelperMethods::freeAddress(m_pServinfo);
-	m_pServinfo = m_pValidAddress = nullptr;
+	m_pValidAddress = nullptr;
 }
 
 void Address::print() const
 {
-	Logger::LOG_MSG("\nIP Addresses         :", m_szIP);
-	Logger::LOG_MSG("\nService              :", m_szService);
-
+	if (!m_szIP.empty())
+	{
+		Logger::LOG_MSG("IP/URL   : ", m_szIP, '\n');
+	}
+	if (!m_szService.empty())
+	{
+		Logger::LOG_MSG("Service  : ", m_szService, "\n\n");
+	}
 	int i = 1;
 	for (addrinfo* p = m_pServinfo; p != nullptr; p = p->ai_next)
 	{
-		Logger::LOG_MSG("\n\nAddress              : #", i++);
-		Logger::LOG_MSG(HelperMethods::asString(*p) + '\n');
+		Logger::LOG_MSG("************** Address #", i++, "  **************\n");
+		Logger::LOG_MSG(HelperMethods::asString(*p), '\n');
+		Logger::LOG_MSG("********************************************\n");
 	}
-	Logger::LOG_MSG("\n");
 }
 
 bool Address::init(int family, int type, int flags)
@@ -331,7 +363,7 @@ inline struct addrinfo* HelperMethods::getAddrInfo(const addrinfo& hints, const 
 	return servers;
 }
 
-inline void HelperMethods::freeAddress(struct addrinfo* serverPtr)
+inline void HelperMethods::freeAddress(struct addrinfo* &serverPtr)
 {
 	freeaddrinfo(serverPtr);
 	serverPtr = nullptr;
@@ -340,20 +372,21 @@ inline void HelperMethods::freeAddress(struct addrinfo* serverPtr)
 inline std::string HelperMethods::asString(const struct addrinfo &info)
 {
 	std::ostringstream os;
-	os << "\nFlags                : 0x" << std::hex << info.ai_flags << std::dec;
-	os << "\nFamily               : " << HelperMethods::getFamilyAsString(info.ai_family);
-	os << "\nSocket Type          : " << HelperMethods::getSocketTypeAsString(info.ai_socktype);
-	os << "\nProtocol             : " << HelperMethods::getProtocolAsString(info.ai_protocol);
+	os << "Flags           : 0x" << std::hex << info.ai_flags << std::dec << '\n';
+	os << "Family          : " << HelperMethods::getFamilyAsString(info.ai_family) << '\n';
+	os << "Socket Type     : " << HelperMethods::getSocketTypeAsString(info.ai_socktype) << '\n';
+	os << "Protocol        : " << HelperMethods::getProtocolAsString(info.ai_protocol) << '\n';
+	
 	if (info.ai_canonname)
 	{
-		os << "\nCanonical name       : " << info.ai_canonname;
+		os << "Canonical name  : " << info.ai_canonname << '\n';
 	}
 	else
 	{
-		os << "\nCanonical name       : " << "nullptr";
+		os << "Canonical name  : nullptr\n";
 	}
 	
-	os << "\nSockaddr length      : " << info.ai_addrlen << '\n';
+	os << "Sockaddr length : " << info.ai_addrlen << '\n';
 	return os.str();
 }
 

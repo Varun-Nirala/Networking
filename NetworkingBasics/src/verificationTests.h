@@ -7,6 +7,8 @@
 #include <functional>
 #include <unordered_map>
 #include <thread>
+#include <mutex>
+#include <condition_variable>
 #include <future>
 
 #include "helper.h"
@@ -29,44 +31,36 @@ public:
 
 	void runTCP_Test();
 
-	void runTCP_TestParallel();
-	void runUDP_TestParallel();
+private:
+	void runTCP_Server(const std::string ip, const std::string port, bool tcp, std::vector<std::string>& msgList);
+	void runTCP_Client(const std::string serverIP, const std::string serverPort, bool tcp, std::vector<std::string>& msgList);
 
 private:
-	bool acceptTcp(nsNW::Server& server, std::string &clientName);
-	void runTCP_Server(std::vector<std::string>& msgList);
-	void runTCP_Client(std::vector<std::string>& msgList);
-
-	void runUDP_Server(std::vector<std::string>& msgList);
-	void runUDP_Client(std::vector<std::string>& msgList);
-
-private:
-	std::vector<std::string>	serverMsgList;
-	std::vector<std::string>	clientMsgList;
+	std::vector<std::string>	m_serverMsgList;
+	std::vector<std::string>	m_clientMsgList;
+	std::mutex					m_mutex;
+	std::condition_variable		m_serverReady;
 };
 
 TestSocket::TestSocket()
 {
-	serverMsgList.emplace_back("Tcp Server Msg 1.");
-	serverMsgList.emplace_back("Tcp Server Msg 2.");
-	serverMsgList.emplace_back("Tcp Server Msg 3.");
-	serverMsgList.emplace_back("Tcp Server Msg 4.");
-	serverMsgList.emplace_back("Tcp Server Msg 5.");
+	m_serverMsgList.emplace_back("Tcp Server Msg 1.");
+	m_serverMsgList.emplace_back("Tcp Server Msg 2.");
+	m_serverMsgList.emplace_back("Tcp Server Msg 3.");
+	m_serverMsgList.emplace_back("Tcp Server Msg 4.");
+	m_serverMsgList.emplace_back("Tcp Server Msg 5.");
 
-	clientMsgList.emplace_back("Tcp Client Msg 1.");
-	clientMsgList.emplace_back("Tcp Client Msg 2.");
-	clientMsgList.emplace_back("Tcp Client Msg 3.");
-	clientMsgList.emplace_back("Tcp Client Msg 4.");
-	clientMsgList.emplace_back("Tcp Client Msg 5.");
+	m_clientMsgList.emplace_back("Tcp Client Msg 1.");
+	m_clientMsgList.emplace_back("Tcp Client Msg 2.");
+	m_clientMsgList.emplace_back("Tcp Client Msg 3.");
+	m_clientMsgList.emplace_back("Tcp Client Msg 4.");
+	m_clientMsgList.emplace_back("Tcp Client Msg 5.");
 }
 
 void TestSocket::runAll_Test()
 {
 	runBasic_Test();
-	runTCP_TestParallel();
-	runUDP_TestParallel();
 }
-
 
 void TestSocket::runBasic_Test()
 {
@@ -90,150 +84,97 @@ void TestSocket::runTCP_Test()
 {
 	Logger::LOG_INFO("Running Tcp test(runTCP_Test).\n\n\n");
 	bool tcpConnection = true;
-	std::string serverPort{ "8080" };
+	std::string serverIP{ "localhost" };
+	std::string serverPort{ "8888" };
 	
-	nsNW::Server server;
-	nsNW::Client client;
-
-	std::unordered_map<std::string, std::vector<std::string>> clientData;
-	std::unordered_map<std::string, std::vector<std::string>> serverData;
-
-	std::string serverName;
-	std::string clientName;
-	std::string fromClient;
-	std::string fromServer;
-	int si = 0;
-	int ci = 0;
-
-	if (server.startServer("", serverPort, true))
-	{
-		std::future<bool> ret = std::async(&TestSocket::acceptTcp, this, std::ref(server), std::ref(clientName));
-		if (client.connectTo("localhost", serverPort, true, serverName) && ret.get())
-		{
-			client.print();
-			server.print();
-			while (ci < clientMsgList.size())
-			{
-				if (client.write(serverName, clientMsgList[ci++]))
-				{
-					if (server.read(clientName, fromClient))
-					{
-						serverData[clientName].push_back(fromClient);
-					}
-				}
-				if (server.write(clientName, serverMsgList[si++]))
-				{
-					if (client.read(serverName, fromServer))
-					{
-						clientData[serverName].push_back(fromServer);
-					}
-				}
-			}
-		}
-		else
-		{
-			Logger::LOG_ERROR("Tcp test(runTCP_Test). Connect failed.");
-		}
-	}
-	Logger::LOG_INFO("Tcp test(runTCP_Test). Ended\n\n\n");
-}
-
-void TestSocket::runTCP_TestParallel()
-{
-	Logger::LOG_INFO("Running Tcp test(runTCP_TestParallel).\n\n\n");
-
 	std::vector<std::thread> threads;
 
-	threads.emplace_back(std::thread(&TestSocket::runTCP_Server, this, serverMsgList));
-	threads.emplace_back(std::thread(&TestSocket::runTCP_Client, this, clientMsgList));
+	threads.emplace_back(std::thread(&TestSocket::runTCP_Server, this, serverIP, serverPort, tcpConnection, std::ref(m_serverMsgList)));
+	threads.emplace_back(std::thread(&TestSocket::runTCP_Client, this, serverIP, serverPort, tcpConnection, std::ref(m_clientMsgList)));
 
 	std::for_each(threads.begin(), threads.end(), std::mem_fn(&std::thread::join));
 
-	Logger::LOG_INFO("Tcp test(runTCP_TestParallel). Ended\n\n\n");
+	Logger::LOG_INFO("Ended Tcp test(runTCP_Test).\n\n\n");
 }
 
-void TestSocket::runUDP_TestParallel()
+void TestSocket::runTCP_Server(const std::string ip, const std::string port, bool tcp, std::vector<std::string> &msgList)
 {
-	Logger::LOG_INFO("Running Udp test :");
-	Logger::LOG_MSG("\n\n\n");
-}
-
-bool TestSocket::acceptTcp(nsNW::Server& server, std::string& clientName)
-{
-	return server.acceptConnection(clientName);
-}
-
-void TestSocket::runTCP_Server(std::vector<std::string> &msgList)
-{
-	bool tcpConnection = true;
-	std::string serverPort{ "8080" };
 	nsNW::Server server;
-	Logger::LOG_MSG("Running TCP server on thread :", std::this_thread::get_id(), ", On Port :", serverPort, '\n');
+	Logger::LOG_MSG("Running TCP server on thread :", std::this_thread::get_id(), ", IP:", ip, ", PORT:", port, '\n');
 
-	std::unordered_map<std::string, std::vector<std::string>> clientData;
+	std::unordered_map<std::string, std::vector<std::string>> recievedMsgs;
 
-	int i = 0;
-	if (server.startServer("", serverPort, true))
+	int nextMsgToSend = 0;
+	if (server.startServer(ip, port, tcp))
 	{
 		server.print();
+		if (server.startListening())
+		{
+			m_serverReady.notify_one();
+		}
 		std::string clientName;
 		if (server.acceptConnection(clientName))
 		{
 			bool keepGoing = true;
 			while (keepGoing)
 			{
-				std::string clientMsg;
-				server.read(clientName, clientMsg);
+				std::string msg;
+				if (server.read(clientName, msg))
+				{
+					Logger::LOG_MSG(clientName, " : ", msg);
+					recievedMsgs[clientName].push_back(msg);
 
-				Logger::LOG_MSG(clientName, " : ", clientMsg);
-
-				clientData[clientName].push_back(clientMsg);
-				server.write(clientName, msgList[i++]);
-				keepGoing = (i < msgList.size());
+					if (!server.write(clientName, msgList[nextMsgToSend++]))
+					{
+						Logger::LOG_MSG("Server : Failed to write.\n");
+					}
+				}
+				else
+				{
+					Logger::LOG_MSG("Server : Failed to read.\n");
+				}
+				keepGoing = (nextMsgToSend < msgList.size());
 			}
 		}
 	}
 }
 
-void TestSocket::runTCP_Client(std::vector<std::string>& msgList)
+void TestSocket::runTCP_Client(const std::string serverIP, const std::string serverPort, bool tcp, std::vector<std::string>& msgList)
 {
-	using namespace std::chrono_literals;
-	std::this_thread::sleep_for(20ms);
-	bool tcpConnection = true;
-	std::string serverPort{ "8080" };
 	nsNW::Client client;
+	Logger::LOG_MSG("Running TCP client on thread :", std::this_thread::get_id(), ", Server IP:", serverIP, ", Server PORT:", serverPort, '\n');
 
-	Logger::LOG_MSG("Running TCP client on thread :", std::this_thread::get_id(), ", Connecting to server on Port :", serverPort, '\n');
+	std::unordered_map<std::string, std::vector<std::string>> recievedMsgs;
 
-	std::unordered_map<std::string, std::vector<std::string>> serverData;
-
-	std::string serverName = "Server_1";
-	int i = 0;
-	if (client.connectTo("localhost", serverPort, true, serverName))
+	int nextMsgToSend = 0;
+	std::string serverName;
+	{
+		std::unique_lock<std::mutex> lk(m_mutex);
+		m_serverReady.wait(lk);
+	}
+	if (client.connectTo(serverIP, serverPort, tcp, serverName))
 	{
 		client.print();
 		bool keepGoing = true;
 		while (keepGoing)
 		{
-			std::string serverMsg;
-			client.write(serverName, msgList[i++]);
-			client.read(serverName, serverMsg);
-
-			Logger::LOG_MSG(serverName, " : ", serverMsg);
-
-			keepGoing = (i < msgList.size());
+			std::string msg;
+			if (client.write(serverName, msgList[nextMsgToSend++]))
+			{
+				if (!client.read(serverName, msg))
+				{
+					Logger::LOG_MSG("Client : Failed to read.\n");
+				}
+				Logger::LOG_MSG(serverName, " : ", msg);
+				recievedMsgs[serverName].push_back(msg);
+			}
+			else
+			{
+				Logger::LOG_MSG("Client : Failed to write.\n");
+			}
+			keepGoing = (nextMsgToSend < msgList.size());
 		}
 	}
-}
-
-void TestSocket::runUDP_Server(std::vector<std::string>& msgList)
-{
-
-}
-
-void TestSocket::runUDP_Client(std::vector<std::string>& msgList)
-{
-
 }
 }
 

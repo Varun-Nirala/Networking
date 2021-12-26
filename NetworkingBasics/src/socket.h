@@ -104,11 +104,11 @@ public:
 	Socket() = default;
 	~Socket() { clear(); };
 
-	Socket(const Socket& sock) = delete;
-	Socket& operator=(const Socket& sock) = delete;
+	Socket(const Socket&) = delete;
+	Socket& operator=(const Socket&) = delete;
 
-	Socket(Socket&& sock) = default;
-	Socket& operator=(Socket && sock) = default;
+	Socket(Socket &&other) noexcept;
+	Socket& operator=(Socket &&other) noexcept;
 
 	inline bool init(const std::string& pAddr, const std::string& pService, bool tcp, int family);
 
@@ -128,10 +128,10 @@ public:
 	int getPort() const { return m_address.port(); }
 	const std::string getIPAddress() const { return m_address.IP(); }
 
-	bool bind();
-	bool listen();
-	bool accept(struct sockaddr_storage &theirAddr, SOCKET_TYPE &sId);
-	bool connect();
+	bool bind() const;
+	bool listen() const;
+	bool accept(struct sockaddr_storage &theirAddr, SOCKET_TYPE &sId) const;
+	bool connect() const;
 
 	void clear();
 
@@ -160,6 +160,25 @@ protected:
 		std::unique_ptr<char[]>				m_pBuf;
 		size_t								m_size{};
 
+		Buffer() = default;
+		~Buffer() = default;
+
+		Buffer(const Buffer&) = delete;
+		Buffer& operator=(const Buffer& other) = delete;
+
+		Buffer(Buffer&& other) noexcept { m_pBuf = std::exchange(other.m_pBuf, nullptr); m_size = std::exchange(other.m_size, 0); }
+	
+		Buffer& operator=(Buffer&& other) noexcept
+		{
+			if (this != &other)
+			{
+				m_pBuf.reset(nullptr);
+				m_pBuf = std::exchange(other.m_pBuf, nullptr);
+				m_size = std::exchange(other.m_size, 0);
+			}
+			return *this;
+		}
+
 		char& operator[](size_t id) { return m_pBuf[id]; }
 		const char& operator[](size_t id) const { return m_pBuf[id]; }
 
@@ -177,9 +196,33 @@ private:
 	Buffer									m_buffer;
 };
 
+Socket::Socket(Socket&& other) noexcept
+{
+	m_socketFd = std::exchange(other.m_socketFd, INVALID_SOCKET);
+	m_address = std::exchange(other.m_address, Address());
+	m_backlog = std::exchange(other.m_backlog, 0);
+	m_buffer = std::exchange(other.m_buffer, Buffer());
+}
+
+Socket& Socket::operator=(Socket&& other) noexcept
+{
+	if (this != &other)
+	{
+		clear();
+		m_socketFd = std::exchange(other.m_socketFd, INVALID_SOCKET);
+		m_address = std::exchange(other.m_address, Address());
+		m_backlog = std::exchange(other.m_backlog, 0);
+		m_buffer = std::exchange(other.m_buffer, Buffer());
+	}
+	return *this;
+}
+
 bool Socket::close()
 {
-	IF_NOTACTIVE_RETURN(true);
+	if (m_socketFd == INVALID_SOCKET)
+	{
+		return true;
+	}
 	int ret{};
 
 #if defined(PLATFORM_WIN)
@@ -195,7 +238,7 @@ bool Socket::close()
 		return false;
 	}
 	m_socketFd = -1;
-	Logger::LOG_MSG("Socket close success.\n");
+	Logger::LOG_INFO("Socket close success.\n");
 	return true;
 }
 
@@ -209,7 +252,7 @@ bool Socket::init(const std::string& pAddr, const std::string& pService, bool tc
 	return init();
 }
 
-bool Socket::bind()
+bool Socket::bind() const
 {
 	IF_NOTACTIVE_RETURN(false);
 	if (::bind(m_socketFd, m_address.getaddress()->ai_addr, m_address.getaddress()->ai_addrlen) == -1)
@@ -217,22 +260,22 @@ bool Socket::bind()
 		Logger::LOG_ERROR("Socket bind error. Error code :", getErrorCode(), '\n');
 		return false;
 	}
-	Logger::LOG_MSG("Socket bind success.\n");
+	Logger::LOG_INFO("Socket bind success.\n");
 	return true;
 }
 
-bool Socket::listen()
+bool Socket::listen() const
 {
 	if (::listen(m_socketFd, m_backlog) == -1)
 	{
 		Logger::LOG_ERROR("Socket listen error. Error code :", getErrorCode(), '\n');
 		return false;
 	}
-	Logger::LOG_MSG("Socket listen success.\n");
+	Logger::LOG_INFO("Socket listen success.\n");
 	return true;
 }
 
-bool Socket::accept(struct sockaddr_storage& theirAddr, SOCKET_TYPE& sId)
+bool Socket::accept(struct sockaddr_storage& theirAddr, SOCKET_TYPE& sId) const
 {
 	sId = -1;
 	IF_NOTACTIVE_RETURN(false);
@@ -246,11 +289,11 @@ bool Socket::accept(struct sockaddr_storage& theirAddr, SOCKET_TYPE& sId)
 		Logger::LOG_ERROR("Connection accept error. Error code :", getErrorCode(), '\n');
 		return sId;
 	}
-	Logger::LOG_MSG("Connection accepted. Their socket ID :", sId, '\n');
+	Logger::LOG_INFO("Connection accepted. Their socket ID :", sId, '\n');
 	return true;
 }
 
-bool Socket::connect()
+bool Socket::connect() const
 {
 	IF_NOTACTIVE_RETURN(false);
 
@@ -259,15 +302,15 @@ bool Socket::connect()
 		Logger::LOG_ERROR("Socket connect error. Error code :", getErrorCode(), '\n');
 		return false;
 	}
-	Logger::LOG_MSG("Socket connect success.\n");
+	Logger::LOG_INFO("Socket connect success.\n");
 	return true;
 }
 
 void Socket::clear()
 {
-	close();
 	m_address.clear();
 	m_buffer.clear();
+	close();
 }
 
 bool Socket::sendTcp(SOCKET_TYPE useSocket, const std::string& msg, int& sentBytes)
@@ -285,12 +328,12 @@ bool Socket::sendTcp(SOCKET_TYPE useSocket, const std::string& msg, int& sentByt
 	}
 	else if (sentBytes == 0)
 	{
-		Logger::LOG_ERROR("Connecton closed by server on socket :", useSocket, '\n');
+		Logger::LOG_INFO("Connecton closed by server on socket :", useSocket, '\n');
 		return false;
 	}
 	if (msg.size() > sentBytes)
 	{
-		Logger::LOG_MSG("Tried sending :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.");
+		Logger::LOG_MSG("Tried sending :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.\n");
 	}
 	else
 	{
@@ -319,7 +362,7 @@ bool Socket::recvTcp(const SOCKET_TYPE useSocket, const std::string& msg, const 
 	}
 	else if (recvBytes == 0)
 	{
-		Logger::LOG_ERROR("Connecton closed by server on socket :", useSocket, '\n');
+		Logger::LOG_INFO("Connecton closed by server on socket :", useSocket, '\n');
 		return false;
 	}
 	Logger::LOG_MSG("Packet length :", recvBytes, "Packet :", m_buffer.get(), '\n');
@@ -346,7 +389,7 @@ bool Socket::sendDatagram(const SOCKET_TYPE useSocket, const struct sockaddr_sto
 	}
 	if (msg.size() > sentBytes)
 	{
-		Logger::LOG_MSG("Tried sending :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.");
+		Logger::LOG_MSG("Tried sending :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.\n");
 	}
 	else
 	{
@@ -394,7 +437,7 @@ bool Socket::init()
 		Logger::LOG_ERROR("Socket setup error.\n");
 		return false;
 	}
-	Logger::LOG_MSG("\nSocket created       : ", m_socketFd, '\n');
+	Logger::LOG_INFO("Socket created  : ", m_socketFd, '\n');
 	return true;
 }
 
@@ -441,16 +484,14 @@ bool Socket::setSocketOptions(const bool reuseAddr, const bool reusePort)
 		Logger::LOG_ERROR("Socket option settting error. Error code :", getErrorCode(), '\n');
 		return false;
 	}
-	Logger::LOG_MSG("\nsetsockopt API success.");
+	Logger::LOG_INFO("setsockopt API success.\n");
 	return true;
 }
 
 void Socket::print() const
 {
-	Logger::LOG_MSG("\nSocket               :");
-	Logger::LOG_MSG("\nSocket ID            :", m_socketFd);
-	Logger::LOG_MSG("\nBacklog              :", m_backlog);
-	Logger::LOG_MSG("\nPrinting Address     :");
+	Logger::LOG_MSG("Socket   : ", m_socketFd, '\n');
+	Logger::LOG_MSG("Backlog  : ", m_backlog, '\n');
 	m_address.print();
 	Logger::LOG_MSG("\n\n");
 }
@@ -458,8 +499,8 @@ void Socket::print() const
 
 void CommData::print() const
 {
-	Logger::LOG_MSG("\nSocket ID            :", _sId);
-	Logger::LOG_MSG("\nAddress Data         :", HelperMethods::asString(*(struct addrinfo*)&(_addr)), '\n\n');
+	Logger::LOG_MSG("Socket   : ", _sId, '\n');
+	Logger::LOG_MSG(HelperMethods::asString(*(struct addrinfo*)&(_addr)), '\n');
 }
 }
 
