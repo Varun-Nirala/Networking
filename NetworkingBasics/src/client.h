@@ -26,7 +26,7 @@ public:
 	bool read(const std::string from, std::string& msg, const int maxSize = 1000);
 	bool write(const std::string to, std::string& msg);
 
-	void print(const std::string& prefix = "") const;
+	void print() const;
 private:
 	bool addServer(Socket& socket, std::string& serverName, const std::string& msg);
 
@@ -166,18 +166,18 @@ bool Client::write(const std::string to, std::string& msg)
 	return ret;
 }
 
-void Client::print(const std::string& prefix) const
+void Client::print() const
 {
 	if (!m_servers.empty())
 	{
-		Logger::LOG_MSG(prefix, "Client Data\n");
+		Logger::LOG_MSG("Client Data\n");
 		int i = 1;
 		for (const auto& it : m_servers)
 		{
-			Logger::LOG_MSG(prefix, "************** Server #", i++, "**************\n");
-			Logger::LOG_MSG(prefix, it.first, '\n');
+			Logger::LOG_MSG("************** Server #", i++, "**************\n");
+			Logger::LOG_MSG(it.first, '\n');
 			it.second.print();
-			Logger::LOG_MSG(prefix, "*******************************************\n");
+			Logger::LOG_MSG("*******************************************\n");
 		}
 	}
 	else
@@ -188,9 +188,8 @@ void Client::print(const std::string& prefix) const
 
 bool Client::addServer(Socket& socket, std::string& serverName, const std::string& msg)
 {
-	Logger::LOG_MSG(msg, serverName, socket.getIPAddress());
-
 	serverName = std::to_string(socket.getSocketId());
+	Logger::LOG_MSG(msg, serverName, socket.getIPAddress(), '\n');
 	m_servers[serverName] = std::move(socket);
 	return true;
 }
@@ -200,7 +199,7 @@ bool Client::initTCP(const std::string& addr, const std::string& port, int famil
 	nsNW::Socket socket;
 	if (socket.init(addr, port, true, family) && socket.connect())
 	{
-		addServer(socket, serverName, "Got TCP Socket connected to server :");
+		addServer(socket, serverName, "Got TCP Socket connected to server   :");
 		return true;
 	}
 	return false;
@@ -211,7 +210,7 @@ bool Client::initUDP(const std::string& addr, const std::string& port, int famil
 	nsNW::Socket socket;
 	if (socket.init(addr, port, false, family) && socket.connect())
 	{
-		addServer(socket, serverName, "Got UDP Socket connected to server :");
+		addServer(socket, serverName, "Got UDP Socket connected to server   :");
 		return true;
 	}
 	return false;

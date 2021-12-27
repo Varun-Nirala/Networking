@@ -34,7 +34,7 @@ public:
 	bool read(const std::string from, std::string& msg, const int maxSize = 1000);
 	bool write(const std::string to, std::string& msg);
 
-	void print(const std::string& prefix = "") const;
+	void print() const;
 private:
 	bool addClient(CommData& commData, std::string& clientName, const std::string &msg);
 
@@ -69,7 +69,9 @@ bool Server::acceptConnection(std::string& clientName)
 	CommData client;
 	if (m_socket.accept(client._addr, client._sId))
 	{
-		addClient(client, clientName, "Server accepted connect request from");
+		client._sockType = m_socket.getSocketType();
+		client._protocol = m_socket.getProtocol();
+		addClient(client, clientName, "Accepted connect request from client :");
 		return true;
 	}
 	return false;
@@ -134,19 +136,19 @@ bool Server::write(const std::string to, std::string& msg)
 	return ret;
 }
 
-void Server::print(const std::string& prefix) const
+void Server::print() const
 {
-	Logger::LOG_MSG(prefix, "nServer Data\n");
+	Logger::LOG_MSG("Server Data\n");
 	m_socket.print();
 	if (!m_clients.empty())
 	{
 		int i = 1;
 		for (const auto& it : m_clients)
 		{
-			Logger::LOG_MSG(prefix, "************** Client #", i++, "**************\n");
-			Logger::LOG_MSG(prefix, it.first, '\n');
+			Logger::LOG_MSG("************** Client #", i++, "**************\n");
+			Logger::LOG_MSG(it.first, '\n');
 			it.second.print();
-			Logger::LOG_MSG(prefix, "*******************************************\n");
+			Logger::LOG_MSG("*******************************************\n");
 		}
 	}
 }
@@ -154,7 +156,7 @@ void Server::print(const std::string& prefix) const
 bool Server::addClient(CommData& commData, std::string& clientName, const std::string &msg)
 {
 	clientName = std::to_string(commData._sId);
-	Logger::LOG_MSG(msg, clientName, " : ", HelperMethods::getIP((addrinfo*)(&commData._addr)));
+	Logger::LOG_MSG(msg, clientName, " : ", HelperMethods::getIP(&(commData._addr)), '\n');
 	m_clients[clientName] = std::move(commData);
 	return true;
 }

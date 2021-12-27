@@ -27,15 +27,14 @@ public:
 
 	void test_Address();
 	void test_Socket();
-	void test_CommData();
 
 	void runTCP_Test();
 
 	void runAll_Test();
 
 private:
-	void runTCP_Server(const std::string ip, const std::string port, bool tcp, std::vector<std::string>& msgList);
-	void runTCP_Client(const std::string serverIP, const std::string serverPort, bool tcp, std::vector<std::string>& msgList);
+	void runTCP_Server(const std::string ip, const std::string port, bool tcp, bool bIPv4, std::vector<std::string>& msgList);
+	void runTCP_Client(const std::string serverIP, const std::string serverPort, bool tcp, bool bIPv4, std::vector<std::string>& msgList);
 
 	bool test_AddressHelper(int testNum, const std::string szIP, const std::string szService, int bTCP, bool bIPv4) const;
 	bool test_SocketHelper(int testNum, const std::string szIP, const std::string szService, int bTCP, bool bIPv4) const;
@@ -162,28 +161,31 @@ void Tester::runTCP_Test()
 {
 	Logger::LOG_INFO("Running Tcp test(runTCP_Test).\n\n\n");
 	bool tcpConnection = true;
-	std::string serverIP{ "localhost" };
+	bool ipv4 = true;
+	std::string serverIP{ "127.0.0.1" };
 	std::string serverPort{ "8888" };
 	
 	std::vector<std::thread> threads;
 
-	threads.emplace_back(std::thread(&Tester::runTCP_Server, this, serverIP, serverPort, tcpConnection, std::ref(m_serverMsgList)));
-	threads.emplace_back(std::thread(&Tester::runTCP_Client, this, serverIP, serverPort, tcpConnection, std::ref(m_clientMsgList)));
+	threads.emplace_back(std::thread(&Tester::runTCP_Server, this, serverIP, serverPort, tcpConnection, ipv4, std::ref(m_serverMsgList)));
+	threads.emplace_back(std::thread(&Tester::runTCP_Client, this, serverIP, serverPort, tcpConnection, ipv4, std::ref(m_clientMsgList)));
 
 	std::for_each(threads.begin(), threads.end(), std::mem_fn(&std::thread::join));
 
 	Logger::LOG_INFO("Ended Tcp test(runTCP_Test).\n\n\n");
 }
 
-void Tester::runTCP_Server(const std::string ip, const std::string port, bool tcp, std::vector<std::string> &msgList)
+void Tester::runTCP_Server(const std::string ip, const std::string port, bool tcp, bool bIPv4, std::vector<std::string> &msgList)
 {
 	nsNW::Server server;
-	Logger::LOG_MSG("Running TCP server on thread :", std::this_thread::get_id(), ", IP:", ip, ", PORT:", port, '\n');
+	Logger::LOG_MSG("Running TCP server on thread :", std::this_thread::get_id());
+	Logger::LOG_MSG(", IP :", ip);
+	Logger::LOG_MSG(", Port :", port, '\n');
 
 	std::unordered_map<std::string, std::vector<std::string>> recievedMsgs;
 
 	int nextMsgToSend = 0;
-	if (server.startServer(ip, port, tcp))
+	if (server.startServer(ip, port, tcp, bIPv4))
 	{
 		server.print();
 		if (server.startListening())
@@ -217,20 +219,24 @@ void Tester::runTCP_Server(const std::string ip, const std::string port, bool tc
 	}
 }
 
-void Tester::runTCP_Client(const std::string serverIP, const std::string serverPort, bool tcp, std::vector<std::string>& msgList)
+void Tester::runTCP_Client(const std::string serverIP, const std::string serverPort, bool tcp, bool bIPv4, std::vector<std::string>& msgList)
 {
+	{
+		std::unique_lock<std::mutex> lk(m_mutex);
+		m_serverReady.wait(lk);
+	}
+
 	nsNW::Client client;
-	Logger::LOG_MSG("Running TCP client on thread :", std::this_thread::get_id(), ", Server IP:", serverIP, ", Server PORT:", serverPort, '\n');
+	Logger::LOG_MSG("Running TCP client on thread :", std::this_thread::get_id());
+	Logger::LOG_MSG(", Connecting server on IP :", serverIP);
+	Logger::LOG_MSG(", Port :", serverPort, '\n');
 
 	std::unordered_map<std::string, std::vector<std::string>> recievedMsgs;
 
 	int nextMsgToSend = 0;
 	std::string serverName;
-	{
-		std::unique_lock<std::mutex> lk(m_mutex);
-		m_serverReady.wait(lk);
-	}
-	if (client.connectTo(serverIP, serverPort, tcp, serverName))
+	
+	if (client.connectTo(serverIP, serverPort, tcp, bIPv4, serverName))
 	{
 		client.print();
 		bool keepGoing = true;

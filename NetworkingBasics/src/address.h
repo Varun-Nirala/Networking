@@ -142,13 +142,22 @@ class HelperMethods
 {
 public:
 	static inline std::string whoami();
+
 	static inline int getPort(const struct addrinfo* addr);
 	static inline std::string getIP(const struct addrinfo* addr);
 	static inline std::string getPortIP(const struct addrinfo* addr);
-	static inline std::string asString(const struct addrinfo& info);
+
+	static inline int getPort(const struct sockaddr_storage *addr);
+	static inline std::string getIP(const struct sockaddr_storage *addr);
+	static inline std::string getPortIP(const struct sockaddr_storage *addr);
+
 	static inline bool getNameInfo(const struct addrinfo& addr, std::string& hostname, std::string& service);
 	static inline struct addrinfo* getAddrInfo(const addrinfo& hints, const std::string& address, const std::string& service);
 	static inline void freeAddress(struct addrinfo* &serverPtr);
+
+	static inline std::string asString(const struct addrinfo& info);
+	static inline std::string asString(const struct sockaddr_storage* addr);
+
 	static inline std::string getProtocolAsString(const int protocol);
 	static inline std::string getFamilyAsString(const int family);
 	static inline std::string getSocketTypeAsString(const int sockType);
@@ -174,8 +183,16 @@ public:
 	inline std::string getService() const { return m_szService; }
 
 	inline const struct addrinfo* getaddress() const { return m_pValidAddress; }
+
 	inline struct addrinfo* getaddress() { return m_pValidAddress; }
+
 	inline int getFamily() const { return m_pValidAddress->ai_family; }
+	inline int getSocketType() const { return m_pValidAddress->ai_socktype; }
+	inline int getProtocol() const { return m_pValidAddress->ai_protocol; }
+	inline int getFlags() const { return m_pValidAddress->ai_flags; }
+	inline sockaddr* getai_addr() const { return m_pValidAddress->ai_addr; }
+	inline decltype(addrinfo::ai_addrlen) getai_addrlen() const { return m_pValidAddress->ai_addrlen; }
+
 	inline bool isTCP() const { return m_pValidAddress->ai_socktype == SOCK_STREAM;}
 	inline bool isIPv4() const { return getFamily() == AF_INET; }
 	inline std::string getHostname() const { return std::string(m_pValidAddress->ai_canonname); }
@@ -259,14 +276,8 @@ void Address::print() const
 {
 	Logger::LOG_MSG("IP/URL          :", m_szIP.empty() ? "nullptr" : m_szIP, '\n');
 	Logger::LOG_MSG("Service         :", m_szService.empty() ? "nullptr" : m_szService, "\n\n");
-	
-	int i = 1;
-	for (addrinfo* p = m_pServinfo; p != nullptr; p = p->ai_next)
-	{
-		Logger::LOG_MSG("**************** Address #", i++, "****************\n");
-		Logger::LOG_MSG(HelperMethods::asString(*p), '\n');
-		Logger::LOG_MSG("**********************************************\n");
-	}
+	Logger::LOG_MSG("Addresses       :\n");
+	Logger::LOG_MSG(HelperMethods::asString(*m_pServinfo));
 }
 
 bool Address::init(int family, int type, int flags)
@@ -285,6 +296,9 @@ bool Address::init(int family, int type, int flags)
 	m_pServinfo = HelperMethods::getAddrInfo(hints, m_szIP, m_szService);
 	return m_pServinfo != nullptr;
 }
+
+
+
 
 inline std::string HelperMethods::whoami()
 {
@@ -321,12 +335,50 @@ inline std::string HelperMethods::getIP(const struct addrinfo* addr)
 	{
 		ptr = &(((struct sockaddr_in6*)addr->ai_addr)->sin6_addr);
 	}
-	inet_ntop(addr->ai_family, ptr, ipstr, INET6_ADDRSTRLEN);
-
+	if (!inet_ntop(addr->ai_family, ptr, ipstr, INET6_ADDRSTRLEN))
+	{
+		Logger::LOG_ERROR("inet_ntop API unsuccessful. Error Code", getErrorCode(), '\n');
+		return {};
+	}
 	return std::string(ipstr);
 }
 
 inline std::string HelperMethods::getPortIP(const struct addrinfo* addr)
+{
+	return getIP(addr) + " : " + std::to_string(getPort(addr));
+}
+
+inline int HelperMethods::getPort(const struct sockaddr_storage* addr)
+{
+	if (addr->ss_family == AF_INET)
+	{
+		return ntohs(((struct sockaddr_in*)addr)->sin_port);
+	}
+	return ntohs(((struct sockaddr_in6*)addr)->sin6_port);
+}
+
+inline std::string HelperMethods::getIP(const struct sockaddr_storage* addr)
+{
+	void* ptr{};
+	char ipstr[INET6_ADDRSTRLEN];
+	memset(ipstr, 0, INET6_ADDRSTRLEN);
+	if (addr->ss_family == AF_INET)
+	{
+		ptr = &(((struct sockaddr_in*)addr)->sin_addr);
+	}
+	else
+	{
+		ptr = &(((struct sockaddr_in6*)addr)->sin6_addr);
+	}
+	if (!inet_ntop(addr->ss_family, ptr, ipstr, INET6_ADDRSTRLEN))
+	{
+		Logger::LOG_ERROR("inet_ntop API unsuccessful. Error Code", getErrorCode(), '\n');
+		return {};
+	}
+	return std::string(ipstr);
+}
+
+inline std::string HelperMethods::getPortIP(const struct sockaddr_storage* addr)
 {
 	return getIP(addr) + " : " + std::to_string(getPort(addr));
 }
@@ -380,8 +432,25 @@ inline std::string HelperMethods::asString(const struct addrinfo &info)
 	{
 		os << "Canonical name  : nullptr\n";
 	}
-	
 	os << "Sockaddr length : " << info.ai_addrlen << '\n';
+	int i = 1;
+
+	for (const addrinfo* p = &info; p != nullptr; p = p->ai_next)
+	{
+		Logger::LOG_MSG("**************** Address #", i++, "****************\n");
+		os << "IP              : " << HelperMethods::getIP(p) << '\n';
+		os << "Port            : " << HelperMethods::getPort(p) << '\n';
+		Logger::LOG_MSG("**********************************************\n");
+	}
+	return os.str();
+}
+
+inline std::string HelperMethods::asString(const struct sockaddr_storage* addr)
+{
+	std::ostringstream os;
+	os << "Family          : " << HelperMethods::getFamilyAsString(addr->ss_family) << '\n';
+	os << "IP              : " << HelperMethods::getIP(addr) << '\n';
+	os << "Port            : " << HelperMethods::getPort(addr) << '\n';
 	return os.str();
 }
 

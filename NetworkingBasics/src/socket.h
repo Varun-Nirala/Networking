@@ -3,6 +3,7 @@
 
 #include "helper.h"
 #include "address.h"
+#include "buffer.h"
 
 namespace nsNW
 {
@@ -83,37 +84,24 @@ struct CommData
 {
 	sockaddr_storage		_addr;
 	SOCKET_TYPE				_sId{ INVALID_SOCKET };
+	int						_sockType{-1};
+	int						_protocol{-1};
 
-	CommData()
-	{
-		std::memset(&_addr, 0, sizeof(sockaddr_storage));
-	}
+	CommData() { std::memset(&_addr, 0, sizeof(sockaddr_storage)); }
 
 	CommData(const CommData&) = delete;
 	CommData& operator=(const CommData&) = delete;
 
-	CommData(CommData&& other) noexcept
-	{
-		_addr = std::exchange(other._addr, sockaddr_storage());
-		_sId = std::exchange(other._sId, INVALID_SOCKET);
-	}
+	CommData(CommData&& other) noexcept;
+	CommData& operator=(CommData&& other) noexcept;
 
-	CommData& operator=(CommData&& other) noexcept
-	{
-		if (this != &other)
-		{
-			_addr = std::exchange(other._addr, sockaddr_storage());
-			_sId = std::exchange(other._sId, INVALID_SOCKET);
-		}
-		return *this;
-	}
-
-	inline std::string getIP() const { return HelperMethods::getIP((struct addrinfo*)&(_addr)); }
-	inline int getPort() const { return HelperMethods::getPort((struct addrinfo*)&(_addr));}
-	inline int getFamily() const { return ((struct addrinfo*)&(_addr))->ai_family; }
-	inline std::string getHostname() const { return ((struct addrinfo*)&(_addr))->ai_canonname; }
-	inline bool isTCP() const { return ((struct addrinfo*)&(_addr))->ai_socktype == SOCK_STREAM; }
-	inline bool isIPv4() const { return ((struct addrinfo*)&(_addr))->ai_family == AF_INET; }
+	inline std::string getIP() const { return HelperMethods::getIP(&_addr); }
+	inline int getPort() const { return HelperMethods::getPort(&_addr);}
+	inline int getFamily() const { return _addr.ss_family; }
+	inline int getSocketType() const { return _sockType; }
+	inline int getProtocol() const { return _protocol; }
+	inline bool isTCP() const { return _sockType == SOCK_STREAM; }
+	inline bool isIPv4() const { return _addr.ss_family == AF_INET; }
 	inline void print() const;
 };
 
@@ -141,6 +129,13 @@ public:
 	inline bool isActive() const { return !(m_socketFd == INVALID_SOCKET); }
 
 	inline int getFamily() const { return m_address.getFamily(); }
+
+	inline int getSocketType() const { return m_address.getSocketType(); }
+	inline int getProtocol() const { return m_address.getProtocol(); }
+	inline int getFlags() const { return m_address.getFlags(); }
+	inline sockaddr* getai_addr() const { return m_address.getai_addr(); }
+	inline int getai_addrlen() const { return m_address.getai_addrlen();; }
+
 	inline std::string getHostname() const { return m_address.getHostname(); }
 	inline bool isTCP() const { return m_address.isTCP(); }
 	inline bool isIPv4() const { return m_address.isIPv4(); }
@@ -174,45 +169,13 @@ protected:
 	bool getValidSocket();
 	bool setSocketOptions(const bool reuseAddr, const bool reusePort);
 
-	struct Buffer
-	{
-		std::unique_ptr<char[]>				m_pBuf;
-		size_t								m_size{};
-
-		Buffer() = default;
-		~Buffer() = default;
-
-		Buffer(const Buffer&) = delete;
-		Buffer& operator=(const Buffer& other) = delete;
-
-		Buffer(Buffer&& other) noexcept { m_pBuf = std::exchange(other.m_pBuf, nullptr); m_size = std::exchange(other.m_size, 0); }
 	
-		Buffer& operator=(Buffer&& other) noexcept
-		{
-			if (this != &other)
-			{
-				m_pBuf.reset(nullptr);
-				m_pBuf = std::exchange(other.m_pBuf, nullptr);
-				m_size = std::exchange(other.m_size, 0);
-			}
-			return *this;
-		}
-
-		char& operator[](size_t id) { return m_pBuf[id]; }
-		const char& operator[](size_t id) const { return m_pBuf[id]; }
-
-		char* get() { return m_pBuf.get(); }
-		const size_t size() const { return m_size; }
-		inline bool init(size_t s) { clear(); m_size = s; m_pBuf = std::make_unique<char[]>(m_size); return m_pBuf != nullptr; }
-		inline void clear() { m_size = 0; m_pBuf.reset(nullptr); }
-		inline bool empty() const { return m_size == 0; }
-	};
 
 private:
 	SOCKET_TYPE								m_socketFd{ INVALID_SOCKET };	// Socket file descriptor
 	Address									m_address;
 	int										m_backlog{5};
-	Buffer									m_buffer;
+	nsUtil::Buffer							m_buffer;
 };
 
 Socket::Socket(Socket&& other) noexcept
@@ -220,7 +183,7 @@ Socket::Socket(Socket&& other) noexcept
 	m_socketFd = std::exchange(other.m_socketFd, INVALID_SOCKET);
 	m_address = std::exchange(other.m_address, Address());
 	m_backlog = std::exchange(other.m_backlog, 0);
-	m_buffer = std::exchange(other.m_buffer, Buffer());
+	m_buffer = std::exchange(other.m_buffer, nsUtil::Buffer());
 }
 
 Socket& Socket::operator=(Socket&& other) noexcept
@@ -231,7 +194,7 @@ Socket& Socket::operator=(Socket&& other) noexcept
 		m_socketFd = std::exchange(other.m_socketFd, INVALID_SOCKET);
 		m_address = std::exchange(other.m_address, Address());
 		m_backlog = std::exchange(other.m_backlog, 0);
-		m_buffer = std::exchange(other.m_buffer, Buffer());
+		m_buffer = std::exchange(other.m_buffer, nsUtil::Buffer());
 	}
 	return *this;
 }
@@ -296,7 +259,7 @@ bool Socket::listen() const
 
 bool Socket::accept(struct sockaddr_storage& theirAddr, SOCKET_TYPE& sId) const
 {
-	sId = -1;
+	sId = INVALID_SOCKET;
 	IF_NOTACTIVE_RETURN(false);
 	
 	socklen_t addr_size = sizeof(theirAddr);
@@ -517,10 +480,34 @@ void Socket::print() const
 }
 
 
+
+CommData::CommData(CommData&& other) noexcept
+{
+	_addr = std::exchange(other._addr, sockaddr_storage());
+	_sId = std::exchange(other._sId, INVALID_SOCKET);
+	_sockType = std::exchange(other._sockType, -1);
+	_protocol = std::exchange(other._protocol, -1);
+}
+
+CommData& CommData::operator=(CommData&& other) noexcept
+{
+	if (this != &other)
+	{
+		_addr = std::exchange(other._addr, sockaddr_storage());
+		_sId = std::exchange(other._sId, INVALID_SOCKET);
+		_sockType = std::exchange(other._sockType, -1);
+		_protocol = std::exchange(other._protocol, -1);
+	}
+	return *this;
+}
+
 void CommData::print() const
 {
 	Logger::LOG_MSG("Socket          :", _sId, '\n');
-	Logger::LOG_MSG(HelperMethods::asString(*(struct addrinfo*)&(_addr)), '\n');
+	Logger::LOG_MSG("Family          :", HelperMethods::getSocketTypeAsString(getFamily()), '\n');
+	Logger::LOG_MSG("Socket Type     :", HelperMethods::getSocketTypeAsString(getSocketType()), '\n');
+	Logger::LOG_MSG("Protocol        :", HelperMethods::getProtocolAsString(getProtocol()), '\n');
+	Logger::LOG_MSG(HelperMethods::asString(&_addr), '\n');
 }
 }
 
