@@ -257,20 +257,15 @@ void Address::clear()
 
 void Address::print() const
 {
-	if (!m_szIP.empty())
-	{
-		Logger::LOG_MSG("IP/URL   : ", m_szIP, '\n');
-	}
-	if (!m_szService.empty())
-	{
-		Logger::LOG_MSG("Service  : ", m_szService, "\n\n");
-	}
+	Logger::LOG_MSG("IP/URL          :", m_szIP.empty() ? "nullptr" : m_szIP, '\n');
+	Logger::LOG_MSG("Service         :", m_szService.empty() ? "nullptr" : m_szService, "\n\n");
+	
 	int i = 1;
 	for (addrinfo* p = m_pServinfo; p != nullptr; p = p->ai_next)
 	{
-		Logger::LOG_MSG("************** Address #", i++, "  **************\n");
+		Logger::LOG_MSG("**************** Address #", i++, "****************\n");
 		Logger::LOG_MSG(HelperMethods::asString(*p), '\n');
-		Logger::LOG_MSG("********************************************\n");
+		Logger::LOG_MSG("**********************************************\n");
 	}
 }
 
@@ -343,7 +338,7 @@ inline bool HelperMethods::getNameInfo(const struct addrinfo& addr, std::string&
 	int ret = ::getnameinfo((addr.ai_addr), sizeof(addr), hbuf, NI_MAXHOST, sbuf, NI_MAXSERV, NI_NUMERICHOST | NI_NUMERICSERV);
 	if (ret != 0)
 	{
-		Logger::LOG_ERROR("getnameinfo API unsuccessful.", gai_strerror(ret), '\n');
+		Logger::LOG_ERROR("getnameinfo API unsuccessful. Error : ", gai_strerror(ret), '\n');
 		return false;
 	}
 	hostname = std::string(hbuf);
@@ -357,7 +352,7 @@ inline struct addrinfo* HelperMethods::getAddrInfo(const addrinfo& hints, const 
 	int ret = ::getaddrinfo(address.empty() ? nullptr : address.c_str(), service.empty() ? nullptr : service.c_str(), &hints, &servers);
 	if (ret != 0)
 	{
-		Logger::LOG_ERROR("getaddrinfo API unsuccessful.", gai_strerror(ret), '\n');
+		Logger::LOG_ERROR("getaddrinfo API unsuccessful. Error : ", gai_strerror(ret), '\n');
 		return nullptr;
 	}
 	return servers;

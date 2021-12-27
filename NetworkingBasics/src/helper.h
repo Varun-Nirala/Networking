@@ -12,7 +12,7 @@ namespace nsNW
 class Logger
 {
 public:
-#ifdef DEBUG
+#ifndef DEBUG
     template<typename T>
     static inline void LOG_INFO(T last) { std::cerr << last ; }
 

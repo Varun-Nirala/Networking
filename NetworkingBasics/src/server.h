@@ -155,7 +155,7 @@ bool Server::addClient(CommData& commData, std::string& clientName, const std::s
 {
 	clientName = std::to_string(commData._sId);
 	Logger::LOG_MSG(msg, clientName, " : ", HelperMethods::getIP((addrinfo*)(&commData._addr)));
-	m_clients[clientName] = commData;
+	m_clients[clientName] = std::move(commData);
 	return true;
 }
 

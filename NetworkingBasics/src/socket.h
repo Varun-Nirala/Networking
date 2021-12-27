@@ -89,6 +89,25 @@ struct CommData
 		std::memset(&_addr, 0, sizeof(sockaddr_storage));
 	}
 
+	CommData(const CommData&) = delete;
+	CommData& operator=(const CommData&) = delete;
+
+	CommData(CommData&& other) noexcept
+	{
+		_addr = std::exchange(other._addr, sockaddr_storage());
+		_sId = std::exchange(other._sId, INVALID_SOCKET);
+	}
+
+	CommData& operator=(CommData&& other) noexcept
+	{
+		if (this != &other)
+		{
+			_addr = std::exchange(other._addr, sockaddr_storage());
+			_sId = std::exchange(other._sId, INVALID_SOCKET);
+		}
+		return *this;
+	}
+
 	inline std::string getIP() const { return HelperMethods::getIP((struct addrinfo*)&(_addr)); }
 	inline int getPort() const { return HelperMethods::getPort((struct addrinfo*)&(_addr));}
 	inline int getFamily() const { return ((struct addrinfo*)&(_addr))->ai_family; }
@@ -255,7 +274,7 @@ bool Socket::init(const std::string& pAddr, const std::string& pService, bool tc
 bool Socket::bind() const
 {
 	IF_NOTACTIVE_RETURN(false);
-	if (::bind(m_socketFd, m_address.getaddress()->ai_addr, m_address.getaddress()->ai_addrlen) == -1)
+	if (::bind(m_socketFd, m_address.getaddress()->ai_addr, static_cast<int>(m_address.getaddress()->ai_addrlen)) == -1)
 	{
 		Logger::LOG_ERROR("Socket bind error. Error code :", getErrorCode(), '\n');
 		return false;
@@ -297,7 +316,7 @@ bool Socket::connect() const
 {
 	IF_NOTACTIVE_RETURN(false);
 
-	if (::connect(m_socketFd, m_address.getaddress()->ai_addr, m_address.getaddress()->ai_addrlen) == -1)
+	if (::connect(m_socketFd, m_address.getaddress()->ai_addr, static_cast<int>(m_address.getaddress()->ai_addrlen)) == -1)
 	{
 		Logger::LOG_ERROR("Socket connect error. Error code :", getErrorCode(), '\n');
 		return false;
@@ -320,7 +339,7 @@ bool Socket::sendTcp(SOCKET_TYPE useSocket, const std::string& msg, int& sentByt
 		Logger::LOG_MSG("Trying to send empty msg.\n");
 		return false;
 	}
-	sentBytes = ::send(useSocket, msg.c_str(), msg.size(), 0);
+	sentBytes = ::send(useSocket, msg.c_str(), static_cast<int>(msg.size()), 0);
 	if (sentBytes == -1)
 	{
 		Logger::LOG_ERROR("Send error. Error code :", getErrorCode(), '\n');
@@ -333,7 +352,7 @@ bool Socket::sendTcp(SOCKET_TYPE useSocket, const std::string& msg, int& sentByt
 	}
 	if (msg.size() > sentBytes)
 	{
-		Logger::LOG_MSG("Tried sending :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.\n");
+		Logger::LOG_MSG("Tried sending   :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.\n");
 	}
 	else
 	{
@@ -365,7 +384,7 @@ bool Socket::recvTcp(const SOCKET_TYPE useSocket, const std::string& msg, const 
 		Logger::LOG_INFO("Connecton closed by server on socket :", useSocket, '\n');
 		return false;
 	}
-	Logger::LOG_MSG("Packet length :", recvBytes, "Packet :", m_buffer.get(), '\n');
+	Logger::LOG_MSG("Packet length   :", recvBytes, "Packet :", m_buffer.get(), '\n');
 	return true;
 }
 
@@ -376,7 +395,7 @@ bool Socket::recvTcp(const std::string& msg, const int maxSize)
 
 bool Socket::sendDatagram(const SOCKET_TYPE useSocket, const struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes)
 {
-	sentBytes = ::sendto(useSocket, msg.c_str(), msg.size(), 0, (struct sockaddr*)&theirAddr, sizeof(theirAddr));
+	sentBytes = ::sendto(useSocket, msg.c_str(), static_cast<int>(msg.size()), 0, (struct sockaddr*)&theirAddr, static_cast<int>(sizeof(theirAddr)));
 	if (sentBytes == -1)
 	{
 		Logger::LOG_ERROR("Send error. Error code :", getErrorCode(), '\n');
@@ -389,7 +408,7 @@ bool Socket::sendDatagram(const SOCKET_TYPE useSocket, const struct sockaddr_sto
 	}
 	if (msg.size() > sentBytes)
 	{
-		Logger::LOG_MSG("Tried sending :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.\n");
+		Logger::LOG_MSG("Tried sending   :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.\n");
 	}
 	else
 	{
@@ -422,6 +441,7 @@ bool Socket::recvDatagram(const SOCKET_TYPE useSocket, struct sockaddr_storage& 
 	m_buffer[recvBytes] = '\0';
 	std::string ip = HelperMethods::getIP((struct addrinfo*)&theirAddr);
 	Logger::LOG_MSG("Got packet from :", ip, "Packet length :", recvBytes, "Packet :", m_buffer.get(), '\n');
+
 	return true;
 }
 
@@ -437,7 +457,7 @@ bool Socket::init()
 		Logger::LOG_ERROR("Socket setup error.\n");
 		return false;
 	}
-	Logger::LOG_INFO("Socket created  : ", m_socketFd, '\n');
+	Logger::LOG_MSG("Socket created  :", m_socketFd, '\n');
 	return true;
 }
 
@@ -490,8 +510,8 @@ bool Socket::setSocketOptions(const bool reuseAddr, const bool reusePort)
 
 void Socket::print() const
 {
-	Logger::LOG_MSG("Socket   : ", m_socketFd, '\n');
-	Logger::LOG_MSG("Backlog  : ", m_backlog, '\n');
+	Logger::LOG_MSG("Socket          :", m_socketFd, '\n');
+	Logger::LOG_MSG("Backlog         :", m_backlog, '\n');
 	m_address.print();
 	Logger::LOG_MSG("\n\n");
 }
@@ -499,7 +519,7 @@ void Socket::print() const
 
 void CommData::print() const
 {
-	Logger::LOG_MSG("Socket   : ", _sId, '\n');
+	Logger::LOG_MSG("Socket          :", _sId, '\n');
 	Logger::LOG_MSG(HelperMethods::asString(*(struct addrinfo*)&(_addr)), '\n');
 }
 }
