@@ -11,7 +11,7 @@
 #include <condition_variable>
 #include <future>
 
-#include "helper.h"
+#include "common.h"
 #include "socket.h"
 #include "server.h"
 #include "client.h"
@@ -44,6 +44,7 @@ private:
 	std::vector<std::string>	m_clientMsgList;
 	std::mutex					m_mutex;
 	std::condition_variable		m_serverReady;
+	std::condition_variable		m_clientReady;
 };
 
 Tester::Tester()
