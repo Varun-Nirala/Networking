@@ -68,6 +68,9 @@ public:
 	bool sendDatagram(const SOCKET_TYPE useSocket, const struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes);
 	bool sendDatagram(const struct sockaddr_storage& theirAddr, const std::string& msg, int& sentBytes);
 
+	bool sendDatagram(const SOCKET_TYPE useSocket, const struct addrinfo& theirAddr, const std::string& msg, int& sentBytes);
+	bool sendDatagram(const struct addrinfo& theirAddr, const std::string& msg, int& sentBytes);
+
 	bool recvDatagram(SOCKET_TYPE useSocket, struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize);
 	bool recvDatagram(struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize);
 
@@ -293,6 +296,35 @@ bool Socket::sendDatagram(const struct sockaddr_storage& theirAddr, const std::s
 	return sendDatagram(m_socketFd, theirAddr, msg, sentBytes);
 }
 
+bool Socket::sendDatagram(const SOCKET_TYPE useSocket, const struct addrinfo& theirAddr, const std::string& msg, int& sentBytes)
+{
+	sentBytes = ::sendto(useSocket, msg.c_str(), static_cast<int>(msg.size()), 0, theirAddr.ai_addr, static_cast<int>(theirAddr.ai_addrlen));
+	if (sentBytes == -1)
+	{
+		Logger::LOG_ERROR("Send error. Error code :", getErrorCode(), '\n');
+		return false;
+	}
+	else if (sentBytes == 0)
+	{
+		Logger::LOG_ERROR("Connecton closed by server on socket :", useSocket, '\n');
+		return false;
+	}
+	if (msg.size() > sentBytes)
+	{
+		Logger::LOG_MSG("Tried sending   :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.\n");
+	}
+	else
+	{
+		Logger::LOG_MSG("Whole message sent successfully.\n");
+	}
+	return true;
+}
+
+bool Socket::sendDatagram(const struct addrinfo& theirAddr, const std::string& msg, int& sentBytes)
+{
+	return sendDatagram(m_socketFd, theirAddr, msg, sentBytes);
+}
+
 bool Socket::recvDatagram(const SOCKET_TYPE useSocket, struct sockaddr_storage& theirAddr, const std::string& msg, const int maxSize)
 {
 	if (m_buffer.empty() || m_buffer.size() < maxSize)
@@ -310,7 +342,7 @@ bool Socket::recvDatagram(const SOCKET_TYPE useSocket, struct sockaddr_storage& 
 		return false;
 	}
 	m_buffer[recvBytes] = '\0';
-	std::string ip = HelperMethods::getIP((struct addrinfo*)&theirAddr);
+	std::string ip = HelperMethods::getIP(&theirAddr);
 	Logger::LOG_MSG("Got packet from :", ip, "Packet length :", recvBytes, "Packet :", m_buffer.get(), '\n');
 
 	return true;

@@ -35,6 +35,7 @@ private:
 
 private:
 	std::unordered_map<std::string, Socket>			m_servers;
+	std::unordered_map<std::string, CommData>		m_recvFroms;	// In case of Datagram
 };
 
 bool Client::connectTo(const std::string& addr, const std::string& port, bool tcp, bool ipv4, std::string& serverName)
@@ -130,15 +131,23 @@ bool Client::read(const std::string from, std::string& msg, const int maxSize)
 		}
 		else
 		{
-			sockaddr_storage ss;
-			ret = data.recvDatagram(ss, msg, maxSize);
+			struct sockaddr_storage client;
+			ret = data.recvDatagram(client, msg, maxSize);
+
 		}
+		if (!ret)
+		{
+			Logger::LOG_ERROR("Read unsuccessful. From :", from, '\n');
+			return false;
+		}
+
 		Logger::LOG_INFO("Recieved :", msg, '\n');
 	}
 	else
 	{
 		Logger::LOG_ERROR("No such connection :", from, '\n');
 	}
+	
 	return ret;
 }
 
@@ -155,8 +164,12 @@ bool Client::write(const std::string to, std::string& msg)
 		}
 		else
 		{
-			sockaddr_storage ss;
-			ret = data.sendDatagram(ss, msg, sentBytes);
+			ret = data.sendDatagram(*(data.getAddress().getaddress()), msg, sentBytes);
+		}
+		if (!ret)
+		{
+			Logger::LOG_ERROR("Wrtie unsuccessful. To :", to, ", Msg : ", msg, '\n');
+			return false;
 		}
 	}
 	else

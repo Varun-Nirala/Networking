@@ -402,6 +402,7 @@ public:
 	int						_protocol{ -1 };
 
 	CommData() { std::memset(&_addr, 0, sizeof(sockaddr_storage)); }
+	~CommData() = default;
 
 	CommData(const CommData&) = delete;
 	CommData& operator=(const CommData&) = delete;

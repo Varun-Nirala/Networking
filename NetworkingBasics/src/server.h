@@ -31,8 +31,8 @@ public:
 
 	SOCKET_TYPE getClientSocketId(const std::string& clientName) const;
 
-	bool read(const std::string from, std::string& msg, const int maxSize = 1000);
-	bool write(const std::string to, std::string& msg);
+	bool read(std::string &from, std::string& msg, const int maxSize = 1000);
+	bool write(std::string &to, std::string& msg);
 
 	void print() const;
 private:
@@ -87,7 +87,7 @@ SOCKET_TYPE Server::getClientSocketId(const std::string& clientName) const
 }
 
 
-bool Server::read(const std::string from, std::string& msg, const int maxSize)
+bool Server::read(std::string &from, std::string& msg, const int maxSize)
 {
 	bool ret{false};
 	
@@ -100,19 +100,28 @@ bool Server::read(const std::string from, std::string& msg, const int maxSize)
 		}
 		else
 		{
-			CommData c;
-			ret = m_socket.recvDatagram(data._sId, c._addr, msg, maxSize);
+			struct sockaddr_storage client;
+			ret = m_socket.recvDatagram(client, msg, maxSize);
 		}
-		Logger::LOG_INFO("Recieved :", msg, '\n');
 	}
 	else
 	{
-		Logger::LOG_ERROR("No such connection :", from, '\n');
+		CommData client;
+		ret = m_socket.recvDatagram(client._addr, msg, maxSize);
+		client._sockType = m_socket.getSocketType();
+		client._protocol = m_socket.getProtocol();
+		client._sId = m_socket.getSocketId();
+		addClient(client, from, "Got UDP Msg from client :");
+	}
+	if (!ret)
+	{
+		Logger::LOG_ERROR("Read unsuccessful. From :", from, '\n');
+		return false;
 	}
 	return ret;
 }
 
-bool Server::write(const std::string to, std::string& msg)
+bool Server::write(std::string &to, std::string& msg)
 {
 	bool ret{ false };
 	int sentBytes{};
@@ -125,14 +134,19 @@ bool Server::write(const std::string to, std::string& msg)
 		}
 		else
 		{
-			CommData c;
-			ret = m_socket.sendDatagram(data._sId, c._addr, msg, sentBytes);
+			ret = m_socket.sendDatagram(data._sId, data._addr, msg, sentBytes);
+		}
+		if (!ret)
+		{
+			Logger::LOG_ERROR("Wrtie unsuccessful. To :", to, ", Msg : ", msg, '\n');
+			return false;
 		}
 	}
 	else
 	{
 		Logger::LOG_ERROR("No such connection :", to, '\n');
 	}
+
 	return ret;
 }
 
