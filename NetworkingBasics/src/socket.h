@@ -44,7 +44,7 @@ public:
 	inline int getProtocol() const { return m_address.getProtocol(); }
 	inline int getFlags() const { return m_address.getFlags(); }
 	inline sockaddr* getai_addr() const { return m_address.getai_addr(); }
-	inline int getai_addrlen() const { return m_address.getai_addrlen();; }
+	inline decltype(addrinfo::ai_addrlen) getai_addrlen() const { return m_address.getai_addrlen();; }
 
 	inline std::string getHostname() const { return m_address.getHostname(); }
 	inline bool isTCP() const { return m_address.isTCP(); }

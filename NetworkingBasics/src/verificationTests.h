@@ -33,19 +33,25 @@ public:
 	void runAll_Test();
 
 private:
+	
+
 	void runTCP_Server(const std::string ip, const std::string port, bool tcp, bool bIPv4, std::vector<std::string>& msgList);
 	void runTCP_Client(const std::string serverIP, const std::string serverPort, bool tcp, bool bIPv4, std::vector<std::string>& msgList);
 
 	bool test_AddressHelper(int testNum, const std::string szIP, const std::string szService, int bTCP, bool bIPv4) const;
 	bool test_SocketHelper(int testNum, const std::string szIP, const std::string szService, int bTCP, bool bIPv4) const;
 
+	inline void waitForCondition(const bool& value);
+	inline void notifyOther(bool &value);
+
 private:
 	std::vector<std::string>	m_serverMsgList;
 	std::vector<std::string>	m_clientMsgList;
 	std::mutex					m_mutex;
 	std::condition_variable		m_conditionVariable;
-	bool						m_serverCanRead{};
-	bool						m_clientCanRead{};
+	bool						m_bServerIsUp{false};
+	bool						m_bServerCanRead{false};
+	bool						m_bClientCanRead{false};
 	
 };
 
@@ -170,7 +176,7 @@ void Tester::runTCP_Test()
 	
 	std::vector<std::thread> threads;
 
-	m_serverCanRead = m_clientCanRead = false;
+	m_bServerIsUp = m_bServerCanRead = m_bClientCanRead = false;
 
 	threads.emplace_back(std::thread(&Tester::runTCP_Server, this, serverIP, serverPort, tcpConnection, ipv4, std::ref(m_serverMsgList)));
 	threads.emplace_back(std::thread(&Tester::runTCP_Client, this, serverIP, serverPort, tcpConnection, ipv4, std::ref(m_clientMsgList)));
@@ -195,7 +201,7 @@ void Tester::runTCP_Server(const std::string ip, const std::string port, bool tc
 		server.print();
 		if (server.startListening())
 		{
-			m_conditionVariable.notify_one();
+			notifyOther(m_bServerIsUp);
 		}
 		std::string clientName;
 		if (server.acceptConnection(clientName))
@@ -203,23 +209,18 @@ void Tester::runTCP_Server(const std::string ip, const std::string port, bool tc
 			bool keepGoing = true;
 			while (keepGoing)
 			{
-				{
-					std::unique_lock<std::mutex> lk(m_mutex);
-					m_conditionVariable.wait(lk, [this]() { return this->m_serverCanRead; });
-				}
+				waitForCondition(m_bServerCanRead);
 				std::string msg;
 				if (server.read(clientName, msg))
 				{
-					m_serverCanRead = false;
+					m_bServerCanRead = false;
 					Logger::LOG_MSG(clientName, " : ", msg);
 					recievedMsgs[clientName].push_back(msg);
-
 					if (!server.write(clientName, msgList[nextMsgToSend++]))
 					{
 						Logger::LOG_MSG("Server : Failed to write.\n");
 					}
-					m_clientCanRead = true;
-					m_conditionVariable.notify_one();
+					notifyOther(m_bClientCanRead);
 				}
 				else
 				{
@@ -233,10 +234,7 @@ void Tester::runTCP_Server(const std::string ip, const std::string port, bool tc
 
 void Tester::runTCP_Client(const std::string serverIP, const std::string serverPort, bool tcp, bool bIPv4, std::vector<std::string>& msgList)
 {
-	{
-		std::unique_lock<std::mutex> lk(m_mutex);
-		m_conditionVariable.wait(lk);
-	}
+	waitForCondition(m_bServerIsUp);
 
 	nsNW::Client client;
 	Logger::LOG_MSG("Running TCP client on thread :", std::this_thread::get_id());
@@ -257,19 +255,15 @@ void Tester::runTCP_Client(const std::string serverIP, const std::string serverP
 			std::string msg;
 			if (client.write(serverName, msgList[nextMsgToSend++]))
 			{
-				m_serverCanRead = true;
-				{
-					std::unique_lock<std::mutex> lk(m_mutex);
-					m_conditionVariable.wait(lk, [this]() { return this->m_clientCanRead; });
-				}
+				notifyOther(m_bServerCanRead);
+				waitForCondition(m_bClientCanRead);
 				if (!client.read(serverName, msg))
 				{
 					Logger::LOG_MSG("Client : Failed to read.\n");
 				}
 				Logger::LOG_MSG(serverName, " : ", msg);
 				recievedMsgs[serverName].push_back(msg);
-				m_clientCanRead = false;
-				m_conditionVariable.notify_one();
+				m_bClientCanRead = false;
 			}
 			else
 			{
@@ -314,6 +308,19 @@ bool Tester::test_SocketHelper(int testNum, const std::string szIP, const std::s
 	socket.print();
 	Logger::LOG_MSG("----------------------------------------------------------------------------------------------------\n");
 	return ret;
+}
+
+void Tester::waitForCondition(const bool &value)
+{
+	std::unique_lock<std::mutex> lk(m_mutex);
+	m_conditionVariable.wait(lk, [&]() { return value; });
+}
+
+void Tester::notifyOther(bool &value)
+{
+	std::unique_lock<std::mutex> lk(m_mutex);
+	value = true;
+	m_conditionVariable.notify_one();
 }
 }
 
