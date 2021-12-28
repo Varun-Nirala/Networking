@@ -43,8 +43,10 @@ private:
 	std::vector<std::string>	m_serverMsgList;
 	std::vector<std::string>	m_clientMsgList;
 	std::mutex					m_mutex;
-	std::condition_variable		m_serverReady;
-	std::condition_variable		m_clientReady;
+	std::condition_variable		m_conditionVariable;
+	bool						m_serverCanRead{};
+	bool						m_clientCanRead{};
+	
 };
 
 Tester::Tester()
@@ -168,6 +170,8 @@ void Tester::runTCP_Test()
 	
 	std::vector<std::thread> threads;
 
+	m_serverCanRead = m_clientCanRead = false;
+
 	threads.emplace_back(std::thread(&Tester::runTCP_Server, this, serverIP, serverPort, tcpConnection, ipv4, std::ref(m_serverMsgList)));
 	threads.emplace_back(std::thread(&Tester::runTCP_Client, this, serverIP, serverPort, tcpConnection, ipv4, std::ref(m_clientMsgList)));
 
@@ -191,7 +195,7 @@ void Tester::runTCP_Server(const std::string ip, const std::string port, bool tc
 		server.print();
 		if (server.startListening())
 		{
-			m_serverReady.notify_one();
+			m_conditionVariable.notify_one();
 		}
 		std::string clientName;
 		if (server.acceptConnection(clientName))
@@ -199,9 +203,14 @@ void Tester::runTCP_Server(const std::string ip, const std::string port, bool tc
 			bool keepGoing = true;
 			while (keepGoing)
 			{
+				{
+					std::unique_lock<std::mutex> lk(m_mutex);
+					m_conditionVariable.wait(lk, [this]() { return this->m_serverCanRead; });
+				}
 				std::string msg;
 				if (server.read(clientName, msg))
 				{
+					m_serverCanRead = false;
 					Logger::LOG_MSG(clientName, " : ", msg);
 					recievedMsgs[clientName].push_back(msg);
 
@@ -209,6 +218,8 @@ void Tester::runTCP_Server(const std::string ip, const std::string port, bool tc
 					{
 						Logger::LOG_MSG("Server : Failed to write.\n");
 					}
+					m_clientCanRead = true;
+					m_conditionVariable.notify_one();
 				}
 				else
 				{
@@ -224,7 +235,7 @@ void Tester::runTCP_Client(const std::string serverIP, const std::string serverP
 {
 	{
 		std::unique_lock<std::mutex> lk(m_mutex);
-		m_serverReady.wait(lk);
+		m_conditionVariable.wait(lk);
 	}
 
 	nsNW::Client client;
@@ -246,12 +257,19 @@ void Tester::runTCP_Client(const std::string serverIP, const std::string serverP
 			std::string msg;
 			if (client.write(serverName, msgList[nextMsgToSend++]))
 			{
+				m_serverCanRead = true;
+				{
+					std::unique_lock<std::mutex> lk(m_mutex);
+					m_conditionVariable.wait(lk, [this]() { return this->m_clientCanRead; });
+				}
 				if (!client.read(serverName, msg))
 				{
 					Logger::LOG_MSG("Client : Failed to read.\n");
 				}
 				Logger::LOG_MSG(serverName, " : ", msg);
 				recievedMsgs[serverName].push_back(msg);
+				m_clientCanRead = false;
+				m_conditionVariable.notify_one();
 			}
 			else
 			{
