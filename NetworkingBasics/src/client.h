@@ -208,7 +208,7 @@ bool Client::initTCP(const std::string& addr, const std::string& port, int famil
 bool Client::initUDP(const std::string& addr, const std::string& port, int family, std::string& serverName)
 {
 	nsNW::Socket socket;
-	if (socket.init(addr, port, false, family) && socket.connect())
+	if (socket.init(addr, port, false, family))
 	{
 		addServer(socket, serverName, "Got UDP Socket connected to server   :");
 		return true;

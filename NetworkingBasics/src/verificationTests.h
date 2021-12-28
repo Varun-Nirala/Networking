@@ -29,14 +29,16 @@ public:
 	void test_Socket();
 
 	void runTCP_Test();
+	void runUDP_Test();
 
 	void runAll_Test();
 
 private:
-	
-
 	void runTCP_Server(const std::string ip, const std::string port, bool tcp, bool bIPv4, std::vector<std::string>& msgList);
 	void runTCP_Client(const std::string serverIP, const std::string serverPort, bool tcp, bool bIPv4, std::vector<std::string>& msgList);
+
+	void runUDP_Server(const std::string ip, const std::string port, bool tcp, bool bIPv4, std::vector<std::string>& msgList);
+	void runUDP_Client(const std::string serverIP, const std::string serverPort, bool tcp, bool bIPv4, std::vector<std::string>& msgList);
 
 	bool test_AddressHelper(int testNum, const std::string szIP, const std::string szService, int bTCP, bool bIPv4) const;
 	bool test_SocketHelper(int testNum, const std::string szIP, const std::string szService, int bTCP, bool bIPv4) const;
@@ -168,7 +170,7 @@ void Tester::test_Socket()
 
 void Tester::runTCP_Test()
 {
-	Logger::LOG_INFO("Running Tcp test(runTCP_Test).\n\n\n");
+	Logger::LOG_INFO("Running TCP test(runTCP_Test).\n\n\n");
 	bool tcpConnection = true;
 	bool ipv4 = true;
 	std::string serverIP{ "127.0.0.1" };
@@ -183,7 +185,27 @@ void Tester::runTCP_Test()
 
 	std::for_each(threads.begin(), threads.end(), std::mem_fn(&std::thread::join));
 
-	Logger::LOG_INFO("Ended Tcp test(runTCP_Test).\n\n\n");
+	Logger::LOG_INFO("Ended TCP test(runTCP_Test).\n\n\n");
+}
+
+void Tester::runUDP_Test()
+{
+	Logger::LOG_INFO("Running UDP test(runUDP_Test).\n\n\n");
+	bool tcpConnection = false;
+	bool ipv4 = true;
+	std::string serverIP{ "127.0.0.1" };
+	std::string serverPort{ "8888" };
+
+	std::vector<std::thread> threads;
+
+	m_bServerIsUp = m_bServerCanRead = m_bClientCanRead = false;
+
+	threads.emplace_back(std::thread(&Tester::runUDP_Server, this, serverIP, serverPort, tcpConnection, ipv4, std::ref(m_serverMsgList)));
+	threads.emplace_back(std::thread(&Tester::runUDP_Client, this, serverIP, serverPort, tcpConnection, ipv4, std::ref(m_clientMsgList)));
+
+	std::for_each(threads.begin(), threads.end(), std::mem_fn(&std::thread::join));
+
+	Logger::LOG_INFO("Ended UDP test(runUDP_Test).\n\n\n");
 }
 
 void Tester::runTCP_Server(const std::string ip, const std::string port, bool tcp, bool bIPv4, std::vector<std::string> &msgList)
@@ -246,6 +268,88 @@ void Tester::runTCP_Client(const std::string serverIP, const std::string serverP
 	int nextMsgToSend = 0;
 	std::string serverName;
 	
+	if (client.connectTo(serverIP, serverPort, tcp, bIPv4, serverName))
+	{
+		client.print();
+		bool keepGoing = true;
+		while (keepGoing)
+		{
+			std::string msg;
+			if (client.write(serverName, msgList[nextMsgToSend++]))
+			{
+				notifyOther(m_bServerCanRead);
+				waitForCondition(m_bClientCanRead);
+				if (!client.read(serverName, msg))
+				{
+					Logger::LOG_MSG("Client : Failed to read.\n");
+				}
+				Logger::LOG_MSG(serverName, " : ", msg);
+				recievedMsgs[serverName].push_back(msg);
+				m_bClientCanRead = false;
+			}
+			else
+			{
+				Logger::LOG_MSG("Client : Failed to write.\n");
+			}
+			keepGoing = (nextMsgToSend < msgList.size());
+		}
+	}
+}
+
+void Tester::runUDP_Server(const std::string ip, const std::string port, bool tcp, bool bIPv4, std::vector<std::string>& msgList)
+{
+	nsNW::Server server;
+	Logger::LOG_MSG("Running UDP server on thread :", std::this_thread::get_id());
+	Logger::LOG_MSG(", IP :", ip);
+	Logger::LOG_MSG(", Port :", port, '\n');
+
+	std::unordered_map<std::string, std::vector<std::string>> recievedMsgs;
+
+	int nextMsgToSend = 0;
+	if (server.startServer(ip, port, tcp, bIPv4))
+	{
+		server.print();
+		notifyOther(m_bServerIsUp);
+		std::string clientName;
+		bool keepGoing = true;
+		while (keepGoing)
+		{
+			waitForCondition(m_bServerCanRead);
+			std::string msg;
+			if (server.read(clientName, msg))
+			{
+				m_bServerCanRead = false;
+				Logger::LOG_MSG(clientName, " : ", msg);
+				recievedMsgs[clientName].push_back(msg);
+				if (!server.write(clientName, msgList[nextMsgToSend++]))
+				{
+					Logger::LOG_MSG("Server : Failed to write.\n");
+				}
+				notifyOther(m_bClientCanRead);
+			}
+			else
+			{
+				Logger::LOG_MSG("Server : Failed to read.\n");
+			}
+			keepGoing = (nextMsgToSend < msgList.size());
+		}
+	}
+}
+
+void Tester::runUDP_Client(const std::string serverIP, const std::string serverPort, bool tcp, bool bIPv4, std::vector<std::string>& msgList)
+{
+	waitForCondition(m_bServerIsUp);
+
+	nsNW::Client client;
+	Logger::LOG_MSG("Running UDP client on thread :", std::this_thread::get_id());
+	Logger::LOG_MSG(", Connecting server on IP :", serverIP);
+	Logger::LOG_MSG(", Port :", serverPort, '\n');
+
+	std::unordered_map<std::string, std::vector<std::string>> recievedMsgs;
+
+	int nextMsgToSend = 0;
+	std::string serverName;
+
 	if (client.connectTo(serverIP, serverPort, tcp, bIPv4, serverName))
 	{
 		client.print();
