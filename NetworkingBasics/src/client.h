@@ -35,7 +35,6 @@ private:
 
 private:
 	std::unordered_map<std::string, Socket>			m_servers;
-	std::unordered_map<std::string, CommData>		m_recvFroms;	// In case of Datagram
 };
 
 bool Client::connectTo(const std::string& addr, const std::string& port, bool tcp, bool ipv4, std::string& serverName)
