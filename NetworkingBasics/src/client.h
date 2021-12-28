@@ -132,6 +132,7 @@ bool Client::read(const std::string from, std::string& msg, const int maxSize)
 		{
 			struct sockaddr_storage client;
 			ret = data.recvDatagram(client, msg, maxSize);
+			Logger::LOG_MSG("Got UDP Msg from Server :", from, " : ", HelperMethods::getIP(&client), '\n');
 
 		}
 		if (!ret)

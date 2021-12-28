@@ -59,21 +59,25 @@ private:
 
 Tester::Tester()
 {
-	m_serverMsgList.emplace_back("Tcp Server Msg 1.");
-	m_serverMsgList.emplace_back("Tcp Server Msg 2.");
-	m_serverMsgList.emplace_back("Tcp Server Msg 3.");
-	m_serverMsgList.emplace_back("Tcp Server Msg 4.");
-	m_serverMsgList.emplace_back("Tcp Server Msg 5.");
+	m_serverMsgList.emplace_back("Server Msg 1.");
+	m_serverMsgList.emplace_back("Server Msg 2.");
+	m_serverMsgList.emplace_back("Server Msg 3.");
+	m_serverMsgList.emplace_back("Server Msg 4.");
+	m_serverMsgList.emplace_back("Server Msg 5.");
 
-	m_clientMsgList.emplace_back("Tcp Client Msg 1.");
-	m_clientMsgList.emplace_back("Tcp Client Msg 2.");
-	m_clientMsgList.emplace_back("Tcp Client Msg 3.");
-	m_clientMsgList.emplace_back("Tcp Client Msg 4.");
-	m_clientMsgList.emplace_back("Tcp Client Msg 5.");
+	m_clientMsgList.emplace_back("Client Msg 1.");
+	m_clientMsgList.emplace_back("Client Msg 2.");
+	m_clientMsgList.emplace_back("Client Msg 3.");
+	m_clientMsgList.emplace_back("Client Msg 4.");
+	m_clientMsgList.emplace_back("Client Msg 5.");
 }
 
 void Tester::runAll_Test()
 {
+	test_Address();
+	test_Socket();
+	runTCP_Test();
+	runUDP_Test();
 }
 
 void Tester::test_Address()
@@ -236,7 +240,7 @@ void Tester::runTCP_Server(const std::string ip, const std::string port, bool tc
 				if (server.read(clientName, msg))
 				{
 					m_bServerCanRead = false;
-					Logger::LOG_MSG(clientName, " : ", msg);
+					Logger::LOG_MSG(clientName, " : ", msg, '\n');
 					recievedMsgs[clientName].push_back(msg);
 					if (!server.write(clientName, msgList[nextMsgToSend++]))
 					{
@@ -283,7 +287,7 @@ void Tester::runTCP_Client(const std::string serverIP, const std::string serverP
 				{
 					Logger::LOG_MSG("Client : Failed to read.\n");
 				}
-				Logger::LOG_MSG(serverName, " : ", msg);
+				Logger::LOG_MSG(serverName, " : ", msg, '\n');
 				recievedMsgs[serverName].push_back(msg);
 				m_bClientCanRead = false;
 			}

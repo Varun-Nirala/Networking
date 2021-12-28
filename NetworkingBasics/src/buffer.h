@@ -2,6 +2,7 @@
 #define __BUFFER007_H__
 
 #include <memory>
+#include <string>
 
 namespace nsUtil
 {
@@ -27,11 +28,13 @@ public:
 		return *this;
 	}
 
-	char& operator[](size_t id) { return m_pBuf[id]; }
-	const char& operator[](size_t id) const { return m_pBuf[id]; }
+	inline operator std::string() { return std::string(m_pBuf.get()); }
 
-	char* get() { return m_pBuf.get(); }
-	const size_t size() const { return m_size; }
+	inline char& operator[](size_t id) { return m_pBuf[id]; }
+	inline const char& operator[](size_t id) const { return m_pBuf[id]; }
+
+	inline char* get() { return m_pBuf.get(); }
+	inline const size_t size() const { return m_size; }
 	inline bool init(size_t s) { clear(); m_size = s; m_pBuf = std::make_unique<char[]>(m_size); return m_pBuf != nullptr; }
 	inline void clear() { m_size = 0; m_pBuf.reset(nullptr); }
 	inline bool empty() const { return m_size == 0; }

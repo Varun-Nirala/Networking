@@ -119,7 +119,7 @@ void Address::print() const
 	Logger::LOG_MSG("IP/URL          :", m_szIP.empty() ? "nullptr" : m_szIP, '\n');
 	Logger::LOG_MSG("Service         :", m_szService.empty() ? "nullptr" : m_szService, "\n\n");
 	Logger::LOG_MSG("Addresses       :\n");
-	Logger::LOG_MSG(HelperMethods::asString(*m_pServinfo));
+	Logger::LOG_MSG(HelperMethods::asString(m_pServinfo));
 }
 
 bool Address::init(int family, int type, int flags)

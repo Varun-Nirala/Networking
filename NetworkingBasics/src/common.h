@@ -158,7 +158,7 @@ public:
 	static inline struct addrinfo* getAddrInfo(const addrinfo& hints, const std::string& address, const std::string& service);
 	static inline void freeAddress(struct addrinfo*& serverPtr);
 
-	static inline std::string asString(const struct addrinfo& info);
+	static inline std::string asString(const struct addrinfo* info);
 	static inline std::string asString(const struct sockaddr_storage* addr);
 
 	static inline std::string getProtocolAsString(const int protocol);
@@ -282,31 +282,32 @@ inline void HelperMethods::freeAddress(struct addrinfo*& serverPtr)
 	serverPtr = nullptr;
 }
 
-inline std::string HelperMethods::asString(const struct addrinfo& info)
+inline std::string HelperMethods::asString(const struct addrinfo* info)
 {
 	std::ostringstream os;
-	os << "Flags           : 0x" << std::hex << info.ai_flags << std::dec << '\n';
-	os << "Family          : " << HelperMethods::getFamilyAsString(info.ai_family) << '\n';
-	os << "Socket Type     : " << HelperMethods::getSocketTypeAsString(info.ai_socktype) << '\n';
-	os << "Protocol        : " << HelperMethods::getProtocolAsString(info.ai_protocol) << '\n';
+	os << "Flags           : 0x" << std::hex << info->ai_flags << std::dec << '\n';
+	os << "Family          : " << HelperMethods::getFamilyAsString(info->ai_family) << '\n';
+	os << "Socket Type     : " << HelperMethods::getSocketTypeAsString(info->ai_socktype) << '\n';
+	os << "Protocol        : " << HelperMethods::getProtocolAsString(info->ai_protocol) << '\n';
 
-	if (info.ai_canonname)
+	if (info->ai_canonname)
 	{
-		os << "Canonical name  : " << info.ai_canonname << '\n';
+		os << "Canonical name  : " << info->ai_canonname << '\n';
 	}
 	else
 	{
 		os << "Canonical name  : nullptr\n";
 	}
-	os << "Sockaddr length : " << info.ai_addrlen << '\n';
+	os << "Sockaddr length : " << info->ai_addrlen << '\n';
 	int i = 1;
 
-	for (const addrinfo* p = &info; p != nullptr; p = p->ai_next)
+	for (const addrinfo* p = info; p != nullptr; p = p->ai_next)
 	{
-		Logger::LOG_MSG("**************** Address #", i++, "****************\n");
+
+		os << "**************** Address #" << i++ << "****************\n";
 		os << "IP              : " << HelperMethods::getIP(p) << '\n';
 		os << "Port            : " << HelperMethods::getPort(p) << '\n';
-		Logger::LOG_MSG("**********************************************\n");
+		os << "**********************************************\n";
 	}
 	return os.str();
 }
