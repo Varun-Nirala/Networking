@@ -210,7 +210,7 @@ bool Socket::sendTcp(SOCKET_TYPE useSocket, const std::string& msg, int& sentByt
 {
 	if (msg.empty())
 	{
-		Logger::LOG_MSG("Trying to send empty msg.\n");
+		Logger::LOG_INFO("Trying to send empty msg.\n");
 		return false;
 	}
 	sentBytes = ::send(useSocket, msg.c_str(), static_cast<int>(msg.size()), 0);
@@ -226,11 +226,11 @@ bool Socket::sendTcp(SOCKET_TYPE useSocket, const std::string& msg, int& sentByt
 	}
 	if (msg.size() > sentBytes)
 	{
-		Logger::LOG_MSG("Tried sending   :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.\n");
+		Logger::LOG_INFO("Tried sending   :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.\n");
 	}
 	else
 	{
-		Logger::LOG_MSG("Whole message sent successfully.\n");
+		Logger::LOG_INFO("Whole message sent successfully.\n");
 	}
 	
 	return true;
@@ -258,7 +258,7 @@ bool Socket::recvTcp(const SOCKET_TYPE useSocket, std::string& msg, const int ma
 		Logger::LOG_INFO("Connecton closed by server on socket :", useSocket, '\n');
 		return false;
 	}
-	Logger::LOG_MSG("Packet length   :", recvBytes, "Packet :", m_buffer.get(), '\n');
+	Logger::LOG_INFO("Packet length   :", recvBytes, "Packet :", m_buffer.get(), '\n');
 	msg = m_buffer;
 	return true;
 }
@@ -283,11 +283,11 @@ bool Socket::sendDatagram(const SOCKET_TYPE useSocket, const struct sockaddr_sto
 	}
 	if (msg.size() > sentBytes)
 	{
-		Logger::LOG_MSG("Tried sending   :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.\n");
+		Logger::LOG_INFO("Tried sending   :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.\n");
 	}
 	else
 	{
-		Logger::LOG_MSG("Whole message sent successfully.\n");
+		Logger::LOG_INFO("Whole message sent successfully.\n");
 	}
 	return true;
 }
@@ -312,11 +312,11 @@ bool Socket::sendDatagram(const SOCKET_TYPE useSocket, const struct addrinfo& th
 	}
 	if (msg.size() > sentBytes)
 	{
-		Logger::LOG_MSG("Tried sending   :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.\n");
+		Logger::LOG_INFO("Tried sending   :", msg.size(), "Bytes, Sent :", sentBytes, ", Unsent :", msg.size() - sentBytes, "Bytes.\n");
 	}
 	else
 	{
-		Logger::LOG_MSG("Whole message sent successfully.\n");
+		Logger::LOG_INFO("Whole message sent successfully.\n");
 	}
 	return true;
 }
@@ -345,9 +345,9 @@ bool Socket::recvDatagram(const SOCKET_TYPE useSocket, struct sockaddr_storage& 
 	m_buffer[recvBytes] = '\0';
 	msg = m_buffer;
 	std::string ip = HelperMethods::getPortIP(&theirAddr);
-	Logger::LOG_MSG("Got packet from :", ip);
-	Logger::LOG_MSG(", Packet length :", recvBytes);
-	Logger::LOG_MSG(", Packet :", m_buffer.get(), '\n');
+	Logger::LOG_INFO("Got packet from :", ip);
+	Logger::LOG_INFO(", Packet length :", recvBytes);
+	Logger::LOG_INFO(", Packet :", m_buffer.get(), '\n');
 
 	return true;
 }
@@ -364,7 +364,7 @@ bool Socket::init()
 		Logger::LOG_ERROR("Socket setup error.\n");
 		return false;
 	}
-	Logger::LOG_MSG("Socket created  :", m_socketFd, '\n');
+	Logger::LOG_INFO("Socket created  :", m_socketFd, '\n');
 	return true;
 }
 

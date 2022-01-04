@@ -4,11 +4,9 @@
 
 using namespace std;
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
-	nsTestCase::Tester tester;
-	tester.runAll_Test();
-
-
-	return 0;
+    nsTestCase::Tester tester;
+    tester.runAll_Test();
+    return 0;
 }

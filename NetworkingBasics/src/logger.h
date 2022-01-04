@@ -8,7 +8,7 @@ namespace nsUtil
 class Logger
 {
 public:
-#ifndef DEBUG
+#ifndef NDEBUG
     template<typename T>
     static inline void LOG_INFO(T last) { std::cerr << last ; }
 

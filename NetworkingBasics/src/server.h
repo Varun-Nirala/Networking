@@ -59,13 +59,13 @@ bool Server::startServer(const std::string& addr, const std::string& port, bool 
 
 bool Server::startListening() const
 {
-	Logger::LOG_MSG("Server is listening for connection.\n");
+	Logger::LOG_INFO("Server is listening for connection.\n");
 	return m_socket.listen();
 }
 
 bool Server::acceptConnection(std::string& clientName)
 {
-	Logger::LOG_MSG("Server got connection request.\n");
+	Logger::LOG_INFO("Server got connection request.\n");
 	CommData client;
 	if (m_socket.accept(client._addr, client._sId))
 	{
@@ -170,7 +170,7 @@ void Server::print() const
 bool Server::addClient(CommData& commData, std::string& clientName, const std::string &msg)
 {
 	clientName = std::to_string(commData._sId);
-	Logger::LOG_MSG(msg, clientName, " : ", HelperMethods::getIP(&(commData._addr)), '\n');
+	Logger::LOG_INFO(msg, clientName, " : ", HelperMethods::getIP(&(commData._addr)), '\n');
 	m_clients[clientName] = std::move(commData);
 	return true;
 }

@@ -132,7 +132,7 @@ bool Client::read(const std::string from, std::string& msg, const int maxSize)
 		{
 			struct sockaddr_storage client;
 			ret = data.recvDatagram(client, msg, maxSize);
-			Logger::LOG_MSG("Got UDP Msg from Server :", from, " : ", HelperMethods::getIP(&client), '\n');
+			Logger::LOG_INFO("Got UDP Msg from Server :", from, " : ", HelperMethods::getIP(&client), '\n');
 
 		}
 		if (!ret)
@@ -202,7 +202,7 @@ void Client::print() const
 bool Client::addServer(Socket& socket, std::string& serverName, const std::string& msg)
 {
 	serverName = std::to_string(socket.getSocketId());
-	Logger::LOG_MSG(msg, serverName, socket.getIPAddress(), '\n');
+	Logger::LOG_INFO(msg, serverName, socket.getIPAddress(), '\n');
 	m_servers[serverName] = std::move(socket);
 	return true;
 }
