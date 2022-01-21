@@ -4,7 +4,7 @@
 
 using namespace std;
 
-int main(int argc, char* argv[])
+int main(int , char **)
 {
     nsTestCase::Tester tester;
     tester.runAll_Test();

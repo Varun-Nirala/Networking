@@ -126,11 +126,11 @@ bool Socket::close()
 
 	if (ret != 0)
 	{
-		m_socketFd = -1;
+		m_socketFd = (SOCKET_TYPE)-1;
 		Logger::LOG_ERROR("Socket close error. Error code :", getErrorCode(), '\n');
 		return false;
 	}
-	m_socketFd = -1;
+	m_socketFd = (SOCKET_TYPE)-1;
 	Logger::LOG_INFO("Socket close success.\n");
 	return true;
 }
@@ -389,7 +389,11 @@ bool Socket::getValidSocket()
 	return true;
 }
 
+#if defined(PLATFORM_UNIX)
 bool Socket::setSocketOptions(const bool reuseAddr, const bool reusePort)
+#else
+bool Socket::setSocketOptions(const bool reuseAddr, const bool)
+#endif
 {
 	IF_NOTACTIVE_RETURN(false);
 
