@@ -102,7 +102,7 @@ namespace nsNW
 	}
 	*/
 
-using Logger = nsUtil::Logger;
+using Logger = ns_Util::Logger;
 
 #if defined(PLATFORM_WIN)
 	using SOCKET_TYPE = SOCKET;

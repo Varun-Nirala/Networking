@@ -92,14 +92,14 @@ void Tester::httpGetRequest_Test(const std::string url)
 	nsNW::Client httpClient;
 	if (!httpClient.connectTo(url, port, true, serverName))
 	{
-		nsUtil::Logger::LOG_ERROR("Connect Error : URL::PORT => ", url, port);
+		Logger::LOG_ERROR("Connect Error : URL::PORT => ", url, port);
 		return;
 	}
 
 	// send GET / HTTP
 	if (!httpClient.write(serverName, get_http))
 	{
-		nsUtil::Logger::LOG_ERROR("Write Error : Server => ", serverName, ", Message => ", get_http);
+		Logger::LOG_ERROR("Write Error : Server => ", serverName, ", Message => ", get_http);
 		return;
 	}
 

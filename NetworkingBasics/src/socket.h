@@ -17,6 +17,7 @@ namespace nsNW
 
 class Socket
 {
+	using Buffer = typename nsCpp_DS::ns_Buffer::Buffer<char>;
 public:
 	Socket() = default;
 	~Socket() { clear(); };
@@ -86,7 +87,7 @@ private:
 	SOCKET_TYPE								m_socketFd{ INVALID_SOCKET };	// Socket file descriptor
 	Address									m_address;
 	int										m_backlog{5};
-	nsUtil::Buffer							m_buffer;
+	Buffer									m_buffer;
 };
 
 Socket::Socket(Socket&& other) noexcept
@@ -94,7 +95,7 @@ Socket::Socket(Socket&& other) noexcept
 	m_socketFd = std::exchange(other.m_socketFd, INVALID_SOCKET);
 	m_address = std::exchange(other.m_address, Address());
 	m_backlog = std::exchange(other.m_backlog, 0);
-	m_buffer = std::exchange(other.m_buffer, nsUtil::Buffer());
+	m_buffer = std::exchange(other.m_buffer, Buffer());
 }
 
 Socket& Socket::operator=(Socket&& other) noexcept
@@ -105,7 +106,7 @@ Socket& Socket::operator=(Socket&& other) noexcept
 		m_socketFd = std::exchange(other.m_socketFd, INVALID_SOCKET);
 		m_address = std::exchange(other.m_address, Address());
 		m_backlog = std::exchange(other.m_backlog, 0);
-		m_buffer = std::exchange(other.m_buffer, nsUtil::Buffer());
+		m_buffer = std::exchange(other.m_buffer, Buffer());
 	}
 	return *this;
 }
