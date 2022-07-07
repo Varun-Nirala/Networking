@@ -16,6 +16,7 @@
 #include "server.h"
 #include "client.h"
 #include "address.h"
+#include "http.h"
 
 namespace nsTestCase
 {
@@ -32,7 +33,8 @@ public:
 	void runTCP_Test();
 	void runUDP_Test();
 
-	void httpGetRequest_Test(const std::string url = "www.google.com");
+	void httpGetRequest_Test(bool useHttp, const std::string url = "www.google.com");
+	
 private:
 	void runTCP_Server(const std::string ip, const std::string port, bool tcp, bool bIPv4, std::vector<std::string>& msgList);
 	void runTCP_Client(const std::string serverIP, const std::string serverPort, bool tcp, bool bIPv4, std::vector<std::string>& msgList);
@@ -43,8 +45,8 @@ private:
 	bool test_AddressHelper(int testNum, const std::string szIP, const std::string szService, int bTCP, bool bIPv4) const;
 	bool test_SocketHelper(int testNum, const std::string szIP, const std::string szService, int bTCP, bool bIPv4) const;
 
-	inline void waitForCondition(const bool& value);
-	inline void notifyOther(bool &value);
+	void waitForCondition(const bool& value);
+	void notifyOther(bool &value);
 
 private:
 	std::vector<std::string>	m_serverMsgList;
@@ -78,49 +80,102 @@ void Tester::runAll_Test()
 	test_Socket();
 	runTCP_Test();
 	runUDP_Test();
-	httpGetRequest_Test();
+	httpGetRequest_Test(false);
+	httpGetRequest_Test(true);
 }
 
-void Tester::httpGetRequest_Test(const std::string url)
+void Tester::httpGetRequest_Test(bool useHttp, const std::string url)
 {
-	Logger::LOG_MSG("START : Testing HTTP GET Request.\n\n");
-	//HTTP GET
-	std::string get_http = "GET / HTTP/1.1\r\nHost: " + url + "\r\nConnection: close\r\n\r\n";
-
-	const char* port = "80";
-	std::string serverName;
-	nsNW::Client httpClient;
-	if (!httpClient.connectTo(url, port, true, serverName))
+	if (useHttp)
 	{
-		Logger::LOG_ERROR("Connect Error : URL::PORT => ", url, port);
-		return;
-	}
-
-	// send GET / HTTP
-	if (!httpClient.write(serverName, get_http))
-	{
-		Logger::LOG_ERROR("Write Error : Server => ", serverName, ", Message => ", get_http);
-		return;
-	}
-
-	// recieve html
-	std::string websiteHtml;
-	std::string receivedMsg;
-	while (httpClient.read(serverName, receivedMsg, 10000))
-	{
-		size_t i = 0;
-		while (receivedMsg[i] >= 32 || receivedMsg[i] == '\n' || receivedMsg[i] == '\r')
+		Logger::LOG_MSG("START : Testing HTTP GET Request using Http class.\n\n");
+		//HTTP GET
+		nsNW::Http http;
+		
+		if (!http.init("HTTP/1.1", "http", url))
 		{
-			websiteHtml += receivedMsg[i++];
+			Logger::LOG_ERROR("Http connect error : URL::PORT => ", url, "::", 80);
+			return;
 		}
+
+		std::string request = http.formRequest(nsNW::Method::HTTP_GET, "/", "Connection: close\r\n\r\n");
+
+		const char* port = "80";
+		std::string serverName;
+		nsNW::Client httpClient;
+		if (!httpClient.connectTo(url, port, true, serverName))
+		{
+			Logger::LOG_ERROR("Connect Error : URL::PORT => ", url, "::", port);
+			return;
+		}
+
+		// send GET / HTTP
+		if (!httpClient.write(serverName, request))
+		{
+			Logger::LOG_ERROR("Write Error : Server => ", serverName, ", Message => ", request);
+			return;
+		}
+
+		// recieve html
+		std::string websiteHtml;
+		std::string receivedMsg;
+		while (httpClient.read(serverName, receivedMsg, 10000))
+		{
+			size_t i = 0;
+			while (receivedMsg[i] >= 32 || receivedMsg[i] == '\n' || receivedMsg[i] == '\r')
+			{
+				websiteHtml += receivedMsg[i++];
+			}
+		}
+
+		Logger::LOG_MSG("\n**************************** [BEG] Recieved Web HTML CODE ****************************\n\n");
+		// Display HTML source 
+		Logger::LOG_MSG(websiteHtml);
+		Logger::LOG_MSG("\n**************************** [END] Recieved Web HTML CODE ****************************\n\n");
+
+		Logger::LOG_MSG("END   : Testing HTTP GET Request using Http class.\n\n");
 	}
+	else
+	{
+		Logger::LOG_MSG("START : Testing HTTP GET Request.\n\n");
+		//HTTP GET
+		std::string get_http = "GET / HTTP/1.1\r\nHost: " + url + "\r\nConnection: close\r\n\r\n";
 
-	Logger::LOG_MSG("\n**************************** [BEG] Recieved Web HTML CODE ****************************\n\n");
-	// Display HTML source 
-	Logger::LOG_MSG(websiteHtml);
-	Logger::LOG_MSG("\n**************************** [END] Recieved Web HTML CODE ****************************\n\n");
+		const char* port = "80";
+		std::string serverName;
+		nsNW::Client httpClient;
+		if (!httpClient.connectTo(url, port, true, serverName))
+		{
+			Logger::LOG_ERROR("Connect Error : URL::PORT => ", url, "::", port);
+			return;
+		}
 
-	Logger::LOG_MSG("END   : Testing HTTP GET Request.\n\n");
+		// send GET / HTTP
+		if (!httpClient.write(serverName, get_http))
+		{
+			Logger::LOG_ERROR("Write Error : Server => ", serverName, ", Message => ", get_http);
+			return;
+		}
+
+		// recieve html
+		std::string websiteHtml;
+		std::string receivedMsg;
+		while (httpClient.read(serverName, receivedMsg, 10000))
+		{
+			size_t i = 0;
+			while (receivedMsg[i] >= 32 || receivedMsg[i] == '\n' || receivedMsg[i] == '\r')
+			{
+				websiteHtml += receivedMsg[i++];
+			}
+		}
+
+		Logger::LOG_MSG("\n**************************** [BEG] Recieved Web HTML CODE ****************************\n\n");
+		// Display HTML source 
+		Logger::LOG_MSG(websiteHtml);
+		Logger::LOG_MSG("\n**************************** [END] Recieved Web HTML CODE ****************************\n\n");
+
+		Logger::LOG_MSG("END   : Testing HTTP GET Request.\n\n");
+	}
 }
 
 void Tester::test_Address()
