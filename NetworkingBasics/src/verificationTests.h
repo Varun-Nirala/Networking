@@ -33,7 +33,7 @@ public:
 	void runTCP_Test();
 	void runUDP_Test();
 
-	void httpGetRequest_Test(bool useHttp, const std::string url = "www.google.com");
+	void httpGetRequest_Test(bool useHttp, const std::string url);
 	
 private:
 	void runTCP_Server(const std::string ip, const std::string port, bool tcp, bool bIPv4, std::vector<std::string>& msgList);
@@ -80,8 +80,8 @@ void Tester::runAll_Test()
 	test_Socket();
 	runTCP_Test();
 	runUDP_Test();
-	httpGetRequest_Test(false);
-	httpGetRequest_Test(true);
+	httpGetRequest_Test(true, "www.google.com");
+	httpGetRequest_Test(false, "www.google.com");
 }
 
 void Tester::httpGetRequest_Test(bool useHttp, const std::string url)
@@ -119,13 +119,10 @@ void Tester::httpGetRequest_Test(bool useHttp, const std::string url)
 		// recieve html
 		std::string websiteHtml;
 		std::string receivedMsg;
-		while (httpClient.read(serverName, receivedMsg, 10000))
+		while (httpClient.read(serverName, receivedMsg, 100000) && !receivedMsg.empty())
 		{
-			size_t i = 0;
-			while (receivedMsg[i] >= 32 || receivedMsg[i] == '\n' || receivedMsg[i] == '\r')
-			{
-				websiteHtml += receivedMsg[i++];
-			}
+			websiteHtml += receivedMsg;
+			receivedMsg.clear();
 		}
 
 		Logger::LOG_MSG("\n**************************** [BEG] Recieved Web HTML CODE ****************************\n\n");
@@ -160,13 +157,10 @@ void Tester::httpGetRequest_Test(bool useHttp, const std::string url)
 		// recieve html
 		std::string websiteHtml;
 		std::string receivedMsg;
-		while (httpClient.read(serverName, receivedMsg, 10000))
+		while (httpClient.read(serverName, receivedMsg, 100000) && !receivedMsg.empty())
 		{
-			size_t i = 0;
-			while (receivedMsg[i] >= 32 || receivedMsg[i] == '\n' || receivedMsg[i] == '\r')
-			{
-				websiteHtml += receivedMsg[i++];
-			}
+			websiteHtml += receivedMsg;
+			receivedMsg.clear();
 		}
 
 		Logger::LOG_MSG("\n**************************** [BEG] Recieved Web HTML CODE ****************************\n\n");

@@ -257,9 +257,10 @@ bool Socket::recvTcp(const SOCKET_TYPE useSocket, std::string& msg, const int ma
 	else if (recvBytes == 0)
 	{
 		Logger::LOG_INFO("Connecton closed by server on socket :", useSocket, '\n');
-		return false;
+		return true;
 	}
-	Logger::LOG_INFO("Packet length   :", recvBytes, "Packet :", m_buffer.get(), '\n');
+	Logger::LOG_INFO("Packet length   :", recvBytes, '\n');
+	//Logger::LOG_INFO("Packet length   :", recvBytes, "Packet :", m_buffer.get(), '\n');
 	msg = m_buffer;
 	return true;
 }
@@ -280,7 +281,7 @@ bool Socket::sendDatagram(const SOCKET_TYPE useSocket, const struct sockaddr_sto
 	else if (sentBytes == 0)
 	{
 		Logger::LOG_ERROR("Connecton closed by server on socket :", useSocket, '\n');
-		return false;
+		return true;
 	}
 	if (msg.size() > sentBytes)
 	{
@@ -346,9 +347,8 @@ bool Socket::recvDatagram(const SOCKET_TYPE useSocket, struct sockaddr_storage& 
 	m_buffer[recvBytes] = '\0';
 	msg = m_buffer;
 	std::string ip = HelperMethods::getPortIP(&theirAddr);
-	Logger::LOG_INFO("Got packet from :", ip);
-	Logger::LOG_INFO(", Packet length :", recvBytes);
-	Logger::LOG_INFO(", Packet :", m_buffer.get(), '\n');
+	Logger::LOG_INFO("Got packet from :", ip, ", Packet length :", recvBytes, '\n');
+	//Logger::LOG_INFO(", Packet :", m_buffer.get(), '\n');
 
 	return true;
 }

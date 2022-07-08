@@ -120,7 +120,7 @@ bool Client::isIPv4(const std::string serverName) const
 bool Client::read(const std::string from, std::string& msg, const int maxSize)
 {
 	bool ret{ false };
-
+	msg.clear();
 	if (m_servers.count(from))
 	{
 		Socket& data = m_servers.at(from);
@@ -140,8 +140,7 @@ bool Client::read(const std::string from, std::string& msg, const int maxSize)
 			Logger::LOG_ERROR("Read unsuccessful. From :", from, '\n');
 			return false;
 		}
-
-		Logger::LOG_INFO("Recieved :", msg, '\n');
+		//Logger::LOG_INFO("Recieved :", msg, '\n');
 	}
 	else
 	{
@@ -202,7 +201,7 @@ void Client::print() const
 bool Client::addServer(Socket& socket, std::string& serverName, const std::string& msg)
 {
 	serverName = std::to_string(socket.getSocketId());
-	Logger::LOG_INFO(msg, serverName, socket.getIPAddress(), '\n');
+	Logger::LOG_INFO(msg, serverName, ", IP : ", socket.getIPAddress(), '\n');
 	m_servers[serverName] = std::move(socket);
 	return true;
 }

@@ -175,7 +175,7 @@ bool Http::http_GET(std::string& request)
 	// http_URL = "http:" "//" host [ ":" port ] [ abs_path [ "?" query ]]
 	request = "GET ";
 	request += m_uriPath + ' ' + m_version + "\r\n";
-	request += "Host: " + m_host + ':' + std::to_string(m_port) + "\r\n\r\n";
+	request += "Host: " + m_host + ':' + std::to_string(m_port) + "\r\n";
 
 	return true;
 }
