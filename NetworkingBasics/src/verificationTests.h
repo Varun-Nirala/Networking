@@ -10,6 +10,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <future>
+#include <cassert>
 
 #include "common.h"
 #include "socket.h"
@@ -95,10 +96,14 @@ void Tester::httpGetRequest_Test(bool useHttp, const std::string url)
 		if (!http.init("HTTP/1.1", "http", url))
 		{
 			Logger::LOG_ERROR("Http connect error : URL::PORT => ", url, "::", 80);
+			assert(false);
 			return;
 		}
 
-		std::string request = http.formRequest(nsNW::Method::HTTP_GET, "/", "Connection: close\r\n\r\n");
+		nsNW::Http::bodyType bodyData;
+		bodyData.push_back(std::make_pair("Connection", "close"));
+
+		std::string request = http.formRequest(nsNW::Method::HTTP_GET, "/", bodyData);
 
 		const char* port = "80";
 		std::string serverName;
@@ -106,6 +111,7 @@ void Tester::httpGetRequest_Test(bool useHttp, const std::string url)
 		if (!httpClient.connectTo(url, port, true, serverName))
 		{
 			Logger::LOG_ERROR("Connect Error : URL::PORT => ", url, "::", port);
+			assert(false);
 			return;
 		}
 
@@ -113,6 +119,7 @@ void Tester::httpGetRequest_Test(bool useHttp, const std::string url)
 		if (!httpClient.write(serverName, request))
 		{
 			Logger::LOG_ERROR("Write Error : Server => ", serverName, ", Message => ", request);
+			assert(false);
 			return;
 		}
 
@@ -144,6 +151,7 @@ void Tester::httpGetRequest_Test(bool useHttp, const std::string url)
 		if (!httpClient.connectTo(url, port, true, serverName))
 		{
 			Logger::LOG_ERROR("Connect Error : URL::PORT => ", url, "::", port);
+			assert(false);
 			return;
 		}
 
@@ -151,6 +159,7 @@ void Tester::httpGetRequest_Test(bool useHttp, const std::string url)
 		if (!httpClient.write(serverName, get_http))
 		{
 			Logger::LOG_ERROR("Write Error : Server => ", serverName, ", Message => ", get_http);
+			assert(false);
 			return;
 		}
 
@@ -337,12 +346,14 @@ void Tester::runTCP_Server(const std::string ip, const std::string port, bool tc
 					if (!server.write(clientName, msgList[nextMsgToSend++]))
 					{
 						Logger::LOG_MSG("Server : Failed to write.\n");
+						assert(false);
 					}
 					notifyOther(m_bClientCanRead);
 				}
 				else
 				{
 					Logger::LOG_MSG("Server : Failed to read.\n");
+					assert(false);
 				}
 				keepGoing = (nextMsgToSend < msgList.size());
 			}
@@ -378,6 +389,7 @@ void Tester::runTCP_Client(const std::string serverIP, const std::string serverP
 				if (!client.read(serverName, msg))
 				{
 					Logger::LOG_MSG("Client : Failed to read.\n");
+					assert(false);
 				}
 				Logger::LOG_MSG(serverName, " : ", msg, '\n');
 				recievedMsgs[serverName].push_back(msg);
@@ -386,6 +398,7 @@ void Tester::runTCP_Client(const std::string serverIP, const std::string serverP
 			else
 			{
 				Logger::LOG_MSG("Client : Failed to write.\n");
+				assert(false);
 			}
 			keepGoing = (nextMsgToSend < msgList.size());
 		}
@@ -420,12 +433,14 @@ void Tester::runUDP_Server(const std::string ip, const std::string port, bool tc
 				if (!server.write(clientName, msgList[nextMsgToSend++]))
 				{
 					Logger::LOG_MSG("Server : Failed to write.\n");
+					assert(false);
 				}
 				notifyOther(m_bClientCanRead);
 			}
 			else
 			{
 				Logger::LOG_MSG("Server : Failed to read.\n");
+				assert(false);
 			}
 			keepGoing = (nextMsgToSend < msgList.size());
 		}
@@ -460,6 +475,7 @@ void Tester::runUDP_Client(const std::string serverIP, const std::string serverP
 				if (!client.read(serverName, msg))
 				{
 					Logger::LOG_MSG("Client : Failed to read.\n");
+					assert(false);
 				}
 				Logger::LOG_MSG(serverName, " : ", msg, '\n');
 				recievedMsgs[serverName].push_back(msg);
@@ -468,6 +484,7 @@ void Tester::runUDP_Client(const std::string serverIP, const std::string serverP
 			else
 			{
 				Logger::LOG_MSG("Client : Failed to write.\n");
+				assert(false);
 			}
 			keepGoing = (nextMsgToSend < msgList.size());
 		}

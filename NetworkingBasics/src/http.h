@@ -54,38 +54,24 @@ std::string to_string(Method m)
 	return method;
 }
 
-enum class RESPONSE_CODE
-{
-	INFORMATION		= 100,
-	SUCCESS			= 200,
-	REDIRECT		= 300,
-	CLIENT_ERROR	= 400,
-	SERVER_ERROR	= 500
-};
-
-struct Response
-{
-	RESPONSE_CODE		responseCategory{};
-	int					responseCode{};
-	std::string			body;
-};
-
 class Http
 {
 public:
-	bool init(const std::string& version, const std::string& scheme, const std::string& host, int port = 80);	// Default for HTTP
-	std::string formRequest(Method method, const std::string& uri, const std::string& body);
+	using bodyType = std::vector<std::pair<std::string, std::string>>;
 
-	bool http_GET(std::string& request);
-	bool http_HEAD(std::string& request);
-	bool http_POST(std::string& request);
-	bool http_PUT(std::string& request);
-	bool http_DELETE(std::string& request);
-	bool http_CONNECT(std::string& request);
-	bool http_OPTION(std::string& request);
-	bool http_TRACE(std::string& request);
+	bool init(const std::string& version, const std::string& scheme, const std::string& host, int port = 80);	// Default for HTTP
+	std::string formRequest(Method method, const std::string& uri, const bodyType& bodyKeyValue);
 
 protected:
+	bool http_request_GET(std::string& request);
+	bool http_request_HEAD(std::string& request);
+	bool http_request_POST(std::string& request);
+	bool http_request_PUT(std::string& request);
+	bool http_request_DELETE(std::string& request);
+	bool http_request_CONNECT(std::string& request);
+	bool http_request_OPTION(std::string& request);
+	bool http_request_TRACE(std::string& request);
+
 	bool parseVersion(const std::string& version);
 	bool parseUri(const std::string& uri);
 	bool parseParams(const std::string& params);
@@ -122,7 +108,7 @@ bool Http::init(const std::string& version, const std::string &scheme, const std
 	return true;
 }
 
-std::string Http::formRequest(Method method, const std::string& uri, const std::string& body)
+std::string Http::formRequest(Method method, const std::string& uri, const bodyType& bodyKeyValue)
 {
 	std::string request{};
 	if (!parseUri(uri))
@@ -135,28 +121,28 @@ std::string Http::formRequest(Method method, const std::string& uri, const std::
 	switch (method)
 	{
 		case nsNW::Method::HTTP_GET:
-			bSuccess = http_GET(request);
+			bSuccess = http_request_GET(request);
 			break;
 		case nsNW::Method::HTTP_HEAD:
-			bSuccess = http_HEAD(request);
+			bSuccess = http_request_HEAD(request);
 			break;
 		case nsNW::Method::HTTP_POST:
-			bSuccess = http_POST(request);
+			bSuccess = http_request_POST(request);
 			break;
 		case nsNW::Method::HTTP_PUT:
-			bSuccess = http_PUT(request);
+			bSuccess = http_request_PUT(request);
 			break;
 		case nsNW::Method::HTTP_DELETE:
-			bSuccess = http_DELETE(request);
+			bSuccess = http_request_DELETE(request);
 			break;
 		case nsNW::Method::HTTP_CONNECT:
-			bSuccess = http_CONNECT(request);
+			bSuccess = http_request_CONNECT(request);
 			break;
 		case nsNW::Method::HTTP_OPTION:
-			bSuccess = http_OPTION(request);
+			bSuccess = http_request_OPTION(request);
 			break;
 		case nsNW::Method::HTTP_TRACE:
-			bSuccess = http_TRACE(request);
+			bSuccess = http_request_TRACE(request);
 			break;
 		default:
 			break;
@@ -167,10 +153,16 @@ std::string Http::formRequest(Method method, const std::string& uri, const std::
 		ns_Util::Logger::LOG_ERROR("HTTP ", to_string(method), " failed.\n");
 		return {};
 	}
-	return request + body;
+
+	for (auto& p : bodyKeyValue)
+	{
+		request += p.first + ": " + p.second + "\r\n";
+	}
+	request += "\r\n";
+	return request;
 }
 
-bool Http::http_GET(std::string& request)
+bool Http::http_request_GET(std::string& request)
 {
 	// http_URL = "http:" "//" host [ ":" port ] [ abs_path [ "?" query ]]
 	request = "GET ";
@@ -180,43 +172,43 @@ bool Http::http_GET(std::string& request)
 	return true;
 }
 
-bool Http::http_HEAD(std::string& request)
+bool Http::http_request_HEAD(std::string& request)
 {
 	(void)request;
 	return true;
 }
 
-bool Http::http_POST(std::string& request)
+bool Http::http_request_POST(std::string& request)
 {
 	(void)request;
 	return true;
 }
 
-bool Http::http_PUT(std::string& request)
+bool Http::http_request_PUT(std::string& request)
 {
 	(void)request;
 	return true;
 }
 
-bool Http::http_DELETE(std::string& request)
+bool Http::http_request_DELETE(std::string& request)
 {
 	(void)request;
 	return true;
 }
 
-bool Http::http_CONNECT(std::string& request)
+bool Http::http_request_CONNECT(std::string& request)
 {
 	(void)request;
 	return true;
 }
 
-bool Http::http_OPTION(std::string& request)
+bool Http::http_request_OPTION(std::string& request)
 {
 	(void)request;
 	return true;
 }
 
-bool Http::http_TRACE(std::string& request)
+bool Http::http_request_TRACE(std::string& request)
 {
 	(void)request;
 	return true;

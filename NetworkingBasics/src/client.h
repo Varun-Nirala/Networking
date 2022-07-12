@@ -27,13 +27,13 @@ public:
 	bool write(const std::string to, std::string& msg);
 
 	void print() const;
-private:
+protected:
 	bool addServer(Socket& socket, std::string& serverName, const std::string& msg);
 
 	inline bool initTCP(const std::string& addr, const std::string& port, int family, std::string& serverName);
 	inline bool initUDP(const std::string& addr, const std::string& port, int family, std::string& serverName);
 
-private:
+protected:
 	std::unordered_map<std::string, Socket>			m_servers;
 };
 

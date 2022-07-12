@@ -35,13 +35,13 @@ public:
 	bool write(std::string &to, std::string& msg);
 
 	void print() const;
-private:
+protected:
 	bool addClient(CommData& commData, std::string& clientName, const std::string &msg);
 
 	inline bool initTCP(Socket& socket, const std::string& addr, const std::string& port, int family);
 	inline bool initUDP(Socket& socket, const std::string& addr, const std::string& port, int family);
 
-private:
+protected:
 	Socket											m_socket;
 	std::unordered_map<std::string, CommData>		m_clients;
 	
